@@ -3,6 +3,11 @@
   "name": "GitHub Bookmark Homescreen",
   "version": "1.0.0",
   "description": "A customizable homescreen with bookmarks organized by folders, synced via GitHub",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "github-bookmark-homescreen@example.com"
+    }
+  },
   "permissions": [
     "storage",
     "https://api.github.com/*",
