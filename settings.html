@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - GitHub Bookmark Homescreen</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Settings</h1>
+    </header>
+
+    <div class="settings-form">
+      <div class="form-section">
+        <h2>GitHub Configuration</h2>
+        <p class="section-description">
+          Configure your GitHub repository to sync your bookmarks across devices.
+        </p>
+
+        <div class="form-group">
+          <label for="github-token">GitHub Personal Access Token</label>
+          <input
+            type="password"
+            id="github-token"
+            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+            autocomplete="off"
+          >
+          <small>
+            <a href="https://github.com/settings/tokens/new?scopes=repo&description=Firefox%20Bookmark%20Homescreen" target="_blank" rel="noopener noreferrer">
+              Create a token
+            </a> with 'repo' scope
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="github-repo">Repository</label>
+          <input
+            type="text"
+            id="github-repo"
+            placeholder="username/repository-name"
+            autocomplete="off"
+          >
+          <small>Format: owner/repository (e.g., "builderOfTheWorlds/firefoxHomeScreen")</small>
+        </div>
+
+        <div class="form-group">
+          <label for="config-path">Configuration File Path</label>
+          <input
+            type="text"
+            id="config-path"
+            placeholder="bookmarks.json"
+            autocomplete="off"
+          >
+          <small>Path to the bookmarks configuration file in your repository</small>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h2>Instructions</h2>
+        <ol class="instructions">
+          <li>
+            <strong>Create a GitHub repository</strong> (public or private) to store your bookmarks configuration
+          </li>
+          <li>
+            <strong>Create a Personal Access Token</strong> with 'repo' scope at
+            <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer">GitHub Settings</a>
+          </li>
+          <li>
+            <strong>Create a bookmarks.json file</strong> in your repository with your bookmarks structure
+          </li>
+          <li>
+            <strong>Enter your settings above</strong> and click Save
+          </li>
+        </ol>
+
+        <details class="example-config">
+          <summary>Example bookmarks.json structure</summary>
+          <pre><code>{
+  "folders": [
+    {
+      "name": "Work",
+      "bookmarks": [
+        {
+          "title": "Gmail",
+          "url": "https://mail.google.com"
+        },
+        {
+          "title": "Calendar",
+          "url": "https://calendar.google.com"
+        }
+      ]
+    },
+    {
+      "name": "Development",
+      "bookmarks": [
+        {
+          "title": "GitHub",
+          "url": "https://github.com"
+        },
+        {
+          "title": "Stack Overflow",
+          "url": "https://stackoverflow.com"
+        }
+      ]
+    }
+  ]
+}</code></pre>
+        </details>
+      </div>
+
+      <div class="form-actions">
+        <button id="save-btn" class="btn btn-primary">Save Settings</button>
+        <button id="test-btn" class="btn btn-secondary">Test Connection</button>
+      </div>
+
+      <div id="status-message" class="status-message hidden"></div>
+    </div>
+  </div>
+
+  <script src="github-sync.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

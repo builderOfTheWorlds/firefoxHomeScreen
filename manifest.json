@@ -1,0 +1,31 @@
+{
+  "manifest_version": 2,
+  "name": "GitHub Bookmark Homescreen",
+  "version": "1.0.0",
+  "description": "A customizable homescreen with bookmarks organized by folders, synced via GitHub",
+  "permissions": [
+    "storage",
+    "https://api.github.com/*",
+    "https://raw.githubusercontent.com/*"
+  ],
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/icon-48.png"
+    },
+    "default_title": "GitHub Bookmark Homescreen"
+  },
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "options_ui": {
+    "page": "settings.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  }
+}

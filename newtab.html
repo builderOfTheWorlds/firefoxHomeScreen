@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Tab</title>
+  <link rel="stylesheet" href="newtab.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Bookmarks</h1>
+      <div class="header-actions">
+        <button id="sync-btn" class="sync-btn" title="Sync with GitHub">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+        <button id="settings-btn" class="settings-btn" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v6m0 6v6m0-18a2 2 0 0 1 2 2v1m-4 0V3a2 2 0 0 1 2-2m0 18a2 2 0 0 1-2-2v-1m4 0v1a2 2 0 0 1-2 2M1 12h6m6 0h6M3 12a2 2 0 0 1 2-2h1m0 4H5a2 2 0 0 1-2-2m18 0a2 2 0 0 1-2 2h-1m0-4h1a2 2 0 0 1 2 2"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="status-message" class="status-message hidden"></div>
+
+    <div id="bookmarks-container" class="bookmarks-container">
+      <!-- Bookmarks will be rendered here -->
+    </div>
+
+    <div id="no-config" class="no-config hidden">
+      <p>No bookmarks configured.</p>
+      <p>Please set up your GitHub repository in <a href="#" id="settings-link">Settings</a>.</p>
+    </div>
+  </div>
+
+  <script src="github-sync.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>
