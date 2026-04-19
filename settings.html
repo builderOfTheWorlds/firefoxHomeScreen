@@ -9,6 +9,7 @@
 <body>
   <div class="container">
     <header>
+      <button id="back-btn" class="btn btn-back">&#8592; Back</button>
       <h1>Settings</h1>
     </header>
 
@@ -54,6 +55,70 @@
             autocomplete="off"
           >
           <small>Path to the bookmarks configuration file in your repository</small>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h2>Layout</h2>
+        <div class="form-group">
+          <label for="folder-columns">Folder Grid Columns</label>
+          <input type="number" id="folder-columns" min="1" max="12" placeholder="4" autocomplete="off">
+          <small>Number of columns in the main folder grid (default: 4)</small>
+        </div>
+        <div class="form-group">
+          <label for="folder-padding">Folder Size <span id="folder-padding-display">24</span>px</label>
+          <input type="range" id="folder-padding" min="8" max="48" step="2" value="24">
+          <small>Padding inside each folder card (default: 24px)</small>
+        </div>
+        <div class="form-group">
+          <label for="bookmark-icon-size">Bookmark Icon Size <span id="bookmark-icon-size-display">28</span>px</label>
+          <input type="range" id="bookmark-icon-size" min="16" max="64" step="2" value="28">
+          <small>Size of favicon icons in bookmark tiles (default: 28px)</small>
+        </div>
+        <div class="form-group">
+          <label for="screenshot-height">Screenshot Thumbnail Height <span id="screenshot-height-display">100</span>px</label>
+          <input type="range" id="screenshot-height" min="40" max="300" step="10" value="100">
+          <small>Height of screenshot previews on bookmark tiles (default: 100px)</small>
+        </div>
+        <div class="form-group">
+          <label for="screenshot-delay">Screenshot Capture Delay <span id="screenshot-delay-display">1500</span>ms</label>
+          <input type="range" id="screenshot-delay" min="0" max="10000" step="500" value="1500">
+          <small>Wait time after page load before capturing screenshot, to allow JS-heavy pages to render (default: 1500ms)</small>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h2>Folder Size Defaults</h2>
+        <p class="section-description">Set default dimensions for all folder cards. Override per-folder via right-click → Edit.</p>
+        <div class="form-group">
+          <label for="default-folder-min-width">Default Folder Min-Width <span id="default-folder-min-width-display">0</span>px</label>
+          <input type="range" id="default-folder-min-width" min="0" max="800" step="10" value="0">
+          <small>Minimum width for folder cards (0 = auto, controlled by grid columns)</small>
+        </div>
+        <div class="form-group">
+          <label for="default-folder-min-height">Default Folder Min-Height <span id="default-folder-min-height-display">0</span>px</label>
+          <input type="range" id="default-folder-min-height" min="0" max="800" step="10" value="0">
+          <small>Minimum height for folder cards (0 = auto)</small>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h2>Bookmark Size Defaults</h2>
+        <p class="section-description">Set default tile dimensions for all bookmarks. Override per-bookmark via right-click → Edit.</p>
+        <div class="form-group">
+          <label for="bookmark-scale">Bookmark Scale <span id="bookmark-scale-display">100</span>%</label>
+          <input type="range" id="bookmark-scale" min="25" max="300" step="5" value="100">
+          <small>Scales bookmark tile size, screenshot height, and icon size together (default: 100%)</small>
+        </div>
+        <div class="form-group">
+          <label for="default-bm-width">Default Bookmark Width <span id="default-bm-width-display">80</span>px</label>
+          <input type="range" id="default-bm-width" min="40" max="300" step="5" value="80">
+          <small>Base width of bookmark tiles before scale is applied (default: 80px)</small>
+        </div>
+        <div class="form-group">
+          <label for="default-bm-height">Default Bookmark Height <span id="default-bm-height-display">80</span>px</label>
+          <input type="range" id="default-bm-height" min="40" max="300" step="5" value="80">
+          <small>Base height of bookmark tiles before scale is applied (default: 80px)</small>
         </div>
       </div>
 

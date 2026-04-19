@@ -1,18 +1,28 @@
 // GitHub Sync Module
-// Handles fetching and updating bookmark configuration from GitHub
+// Handles fetching and pushing bookmark configuration to/from GitHub
 
 class GitHubSync {
-  constructor() {
-    this.config = null;
-  }
-
   // Load settings from browser storage
   async loadSettings() {
-    const result = await browser.storage.sync.get(['githubToken', 'githubRepo', 'configPath']);
+    const result = await browser.storage.sync.get([
+      'githubToken', 'githubRepo', 'configPath',
+      'folderColumns', 'folderPadding', 'bookmarkIconSize', 'screenshotHeight', 'screenshotDelay',
+      'defaultFolderMinWidth', 'defaultFolderMinHeight', 'defaultBmWidth', 'defaultBmHeight', 'bookmarkScale'
+    ]);
     return {
       token: result.githubToken || '',
-      repo: result.githubRepo || '', // Format: "owner/repo"
-      configPath: result.configPath || 'bookmarks.json'
+      repo: result.githubRepo || '',
+      configPath: result.configPath || 'bookmarks.json',
+      folderColumns: result.folderColumns || 4,
+      folderPadding: result.folderPadding || 24,
+      bookmarkIconSize: result.bookmarkIconSize || 28,
+      screenshotHeight: result.screenshotHeight || 100,
+      screenshotDelay: result.screenshotDelay ?? 1500,
+      defaultFolderMinWidth: result.defaultFolderMinWidth || 0,
+      defaultFolderMinHeight: result.defaultFolderMinHeight || 0,
+      defaultBmWidth: result.defaultBmWidth || 80,
+      defaultBmHeight: result.defaultBmHeight || 80,
+      bookmarkScale: result.bookmarkScale || 100
     };
   }
 
@@ -21,7 +31,17 @@ class GitHubSync {
     await browser.storage.sync.set({
       githubToken: settings.token,
       githubRepo: settings.repo,
-      configPath: settings.configPath
+      configPath: settings.configPath,
+      folderColumns: settings.folderColumns,
+      folderPadding: settings.folderPadding,
+      bookmarkIconSize: settings.bookmarkIconSize,
+      screenshotHeight: settings.screenshotHeight,
+      screenshotDelay: settings.screenshotDelay,
+      defaultFolderMinWidth: settings.defaultFolderMinWidth,
+      defaultFolderMinHeight: settings.defaultFolderMinHeight,
+      defaultBmWidth: settings.defaultBmWidth,
+      defaultBmHeight: settings.defaultBmHeight,
+      bookmarkScale: settings.bookmarkScale
     });
   }
 
@@ -42,7 +62,7 @@ class GitHubSync {
 
     const response = await fetch(url, {
       headers: {
-        'Authorization': `token ${settings.token}`,
+        'Authorization': `Bearer ${settings.token}`,
         'Accept': 'application/vnd.github.v3+json'
       }
     });
@@ -55,19 +75,13 @@ class GitHubSync {
     }
 
     const data = await response.json();
-
-    // GitHub returns file content as base64
-    const content = atob(data.content);
-    this.config = JSON.parse(content);
-
-    // Cache the config locally
-    await this.cacheConfig(this.config);
-
-    return this.config;
+    return JSON.parse(atob(data.content));
   }
 
-  // Update bookmarks configuration on GitHub
-  async updateConfig(newConfig) {
+  // Push bookmarks configuration to GitHub
+  // Retries on 409 (SHA conflict) because GitHub's CDN can briefly serve a
+  // stale SHA immediately after a commit, causing the next PUT to conflict.
+  async updateConfig(newConfig, _attempt = 0) {
     const settings = await this.loadSettings();
 
     if (!settings.token || !settings.repo) {
@@ -79,79 +93,45 @@ class GitHubSync {
       throw new Error('Invalid repository format. Use "owner/repo"');
     }
 
-    // First, get the current file to get its SHA (required for updates)
-    const getUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${settings.configPath}`;
+    const fileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${settings.configPath}`;
+    const authHeaders = {
+      'Authorization': `Bearer ${settings.token}`,
+      'Accept': 'application/vnd.github.v3+json'
+    };
 
-    const getResponse = await fetch(getUrl, {
-      headers: {
-        'Authorization': `token ${settings.token}`,
-        'Accept': 'application/vnd.github.v3+json'
-      }
-    });
-
+    // Always fetch a fresh SHA immediately before the PUT so we have the
+    // latest value even if a previous commit changed it.
+    const getResponse = await fetch(fileUrl, { headers: authHeaders });
     let sha = null;
     if (getResponse.ok) {
       const currentFile = await getResponse.json();
       sha = currentFile.sha;
     }
 
-    // Update the file
     const content = JSON.stringify(newConfig, null, 2);
     const encodedContent = btoa(content);
 
-    const updateUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${settings.configPath}`;
-
-    const updateResponse = await fetch(updateUrl, {
+    const updateResponse = await fetch(fileUrl, {
       method: 'PUT',
-      headers: {
-        'Authorization': `token ${settings.token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: 'Update bookmarks configuration',
-        content: encodedContent,
-        sha: sha // Include SHA if file exists
-      })
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign(
+        { message: 'Update bookmarks configuration', content: encodedContent },
+        sha ? { sha } : {}
+      ))
     });
+
+    if (updateResponse.status === 409 && _attempt < 3) {
+      const delay = 500 * (_attempt + 1);
+      console.warn(`[GitHubSync] 409 SHA conflict (attempt ${_attempt + 1}), retrying in ${delay}ms…`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return this.updateConfig(newConfig, _attempt + 1);
+    }
 
     if (!updateResponse.ok) {
       throw new Error(`Failed to update config: ${updateResponse.status} ${updateResponse.statusText}`);
     }
 
-    this.config = newConfig;
-    await this.cacheConfig(newConfig);
-
     return newConfig;
-  }
-
-  // Cache config locally for offline access
-  async cacheConfig(config) {
-    await browser.storage.local.set({ cachedBookmarks: config });
-  }
-
-  // Get cached config
-  async getCachedConfig() {
-    const result = await browser.storage.local.get('cachedBookmarks');
-    return result.cachedBookmarks || null;
-  }
-
-  // Get config (from cache or fetch from GitHub)
-  async getConfig(forceRefresh = false) {
-    if (forceRefresh || !this.config) {
-      try {
-        return await this.fetchConfig();
-      } catch (error) {
-        // If fetch fails, try to use cached version
-        const cached = await this.getCachedConfig();
-        if (cached) {
-          this.config = cached;
-          return cached;
-        }
-        throw error;
-      }
-    }
-    return this.config;
   }
 }
 

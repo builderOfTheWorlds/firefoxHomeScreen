@@ -25,6 +25,17 @@ A Firefox extension that replaces your new tab page with a customizable homescre
 4. Navigate to the extension directory and select `manifest.json`
 5. The extension will be loaded and the settings page will open
 
+### Enabling Developer Mode in Firefox
+
+Firefox doesn't have a single "developer mode" toggle like Chrome — instead, you load unsigned extensions via the debugging page:
+
+1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
+2. Click **"Load Temporary Add-on..."**
+3. Browse to the extension directory and select `manifest.json`
+4. The extension is now active — open a new tab to see it
+
+> **Note:** Temporary add-ons are removed when Firefox restarts. To persist across restarts without signing, use [Firefox Developer Edition](https://www.mozilla.org/en-US/firefox/developer/) or [Firefox Nightly](https://www.mozilla.org/en-US/firefox/channel/desktop/#nightly), which allow unsigned extensions via `about:config` → set `xpinstall.signatures.required` to `false`.
+
 ### For Production Use
 
 *Will be available on Firefox Add-ons store once published*
@@ -149,6 +160,18 @@ firefoxHomeScreen/
 ├── bookmarks.json        # Sample configuration
 ├── icons/                # Extension icons
 └── README.md            # This file
+```
+
+### Python Environment
+
+Tooling scripts (e.g. icon generation) use Python. A `.venv` is included for this:
+
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# Mac/Linux
+source .venv/bin/activate
 ```
 
 ### Technologies Used

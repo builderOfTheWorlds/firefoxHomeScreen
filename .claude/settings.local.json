@@ -5,7 +5,15 @@
       "Bash(git fetch:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(web-ext --version)",
+      "Bash(npm install *)",
+      "Bash(web-ext lint *)",
+      "Bash(python3 -c ' *)",
+      "Bash(py --version)",
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(grep -E \"\\\\.\\(js|json\\)$\")"
     ],
     "deny": [],
     "ask": []

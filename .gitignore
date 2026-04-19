@@ -1,1 +1,4 @@
 .idea/
+.env
+web-ext-artifacts/
+.venv/

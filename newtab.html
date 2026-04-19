@@ -11,6 +11,12 @@
     <header>
       <h1>Bookmarks</h1>
       <div class="header-actions">
+        <button id="add-btn" class="add-btn" title="Add Bookmark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <span id="pending-indicator" class="pending-indicator hidden"></span>
         <button id="sync-btn" class="sync-btn" title="Sync with GitHub">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -37,6 +43,91 @@
     </div>
   </div>
 
+  <div id="add-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Add Bookmark</h2>
+      <div class="modal-form">
+        <div class="modal-group">
+          <label for="bm-title">Title</label>
+          <input type="text" id="bm-title" placeholder="Bookmark title" autocomplete="off">
+        </div>
+        <div class="modal-group">
+          <label for="bm-url">URL</label>
+          <input type="text" id="bm-url" placeholder="https://example.com" autocomplete="off">
+        </div>
+        <div class="modal-group">
+          <label for="bm-folder">Folder</label>
+          <select id="bm-folder"></select>
+        </div>
+        <div class="modal-group hidden" id="new-folder-group">
+          <label for="bm-new-folder">New Folder Name</label>
+          <input type="text" id="bm-new-folder" placeholder="Folder name" autocomplete="off">
+        </div>
+      </div>
+      <div id="modal-status" class="modal-status hidden"></div>
+      <div class="modal-actions">
+        <button id="modal-save-btn" class="modal-btn modal-btn-primary">Save</button>
+        <button id="modal-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="edit-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 id="edit-modal-title">Edit</h2>
+      <div class="modal-form">
+        <div class="modal-group" id="edit-folder-name-group">
+          <label for="edit-folder-name">Folder Name</label>
+          <input type="text" id="edit-folder-name" autocomplete="off">
+        </div>
+        <div class="modal-group hidden" id="edit-folder-width-group">
+          <label for="edit-folder-width">Custom Width (px)</label>
+          <input type="number" id="edit-folder-width" min="0" placeholder="Leave blank for default" autocomplete="off">
+          <small>Override min-width for this folder card (0 or blank = use default)</small>
+        </div>
+        <div class="modal-group hidden" id="edit-folder-min-height-group">
+          <label for="edit-folder-min-height">Custom Min-Height (px)</label>
+          <input type="number" id="edit-folder-min-height" min="0" placeholder="Leave blank for default" autocomplete="off">
+          <small>Override min-height for this folder card (0 or blank = use default)</small>
+        </div>
+        <div class="modal-group" id="edit-bm-title-group">
+          <label for="edit-bm-title">Title</label>
+          <input type="text" id="edit-bm-title" autocomplete="off">
+        </div>
+        <div class="modal-group" id="edit-bm-url-group">
+          <label for="edit-bm-url">URL</label>
+          <input type="text" id="edit-bm-url" autocomplete="off">
+        </div>
+        <div class="modal-group hidden" id="edit-bm-width-group">
+          <label for="edit-bm-width">Custom Width (px)</label>
+          <input type="number" id="edit-bm-width" min="0" placeholder="Leave blank for default" autocomplete="off">
+          <small>Override tile width for this bookmark (blank = use default)</small>
+        </div>
+        <div class="modal-group hidden" id="edit-bm-height-group">
+          <label for="edit-bm-height">Custom Height (px)</label>
+          <input type="number" id="edit-bm-height" min="0" placeholder="Leave blank for default" autocomplete="off">
+          <small>Override tile height for this bookmark (blank = use default)</small>
+        </div>
+      </div>
+      <div id="edit-modal-status" class="modal-status hidden"></div>
+      <div class="modal-actions">
+        <button id="edit-modal-save-btn" class="modal-btn modal-btn-primary">Save</button>
+        <button id="edit-modal-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="context-menu" class="context-menu hidden">
+    <ul>
+      <li id="ctx-add-link">Add Link to Folder</li>
+      <li id="ctx-edit">Edit</li>
+      <li id="ctx-refresh-screenshot">Refresh Screenshot</li>
+      <li id="ctx-remove">Remove Bookmark</li>
+    </ul>
+  </div>
+
+  <script src="screenshot-db.js"></script>
+  <script src="bookmark-db.js"></script>
   <script src="github-sync.js"></script>
   <script src="newtab.js"></script>
 </body>

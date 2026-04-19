@@ -22,9 +22,29 @@ body {
 }
 
 header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   margin-bottom: 2rem;
   padding-bottom: 1rem;
   border-bottom: 2px solid #e2e8f0;
+}
+
+.btn-back {
+  background: #e2e8f0;
+  color: #2d3748;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.btn-back:hover {
+  background: #cbd5e0;
+  transform: translateY(-2px);
+}
+
+.btn-back:active {
+  transform: translateY(0);
 }
 
 h1 {

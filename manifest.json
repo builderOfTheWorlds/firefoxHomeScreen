@@ -1,15 +1,23 @@
 {
   "manifest_version": 2,
   "name": "GitHub Bookmark Homescreen",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A customizable homescreen with bookmarks organized by folders, synced via GitHub",
   "browser_specific_settings": {
     "gecko": {
-      "id": "github-bookmark-homescreen@example.com"
+      "id": "github-bookmark-homescreen@builderOfTheWorlds",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ],
+        "optional": []
+      }
     }
   },
   "permissions": [
     "storage",
+    "tabs",
+    "<all_urls>",
     "https://api.github.com/*",
     "https://raw.githubusercontent.com/*"
   ],
@@ -31,6 +39,9 @@
     "96": "icons/icon-96.png"
   },
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "screenshot-db.js",
+      "background.js"
+    ]
   }
 }
