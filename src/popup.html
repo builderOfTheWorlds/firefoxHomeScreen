@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Add Bookmark</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      width: 320px;
+      padding: 1rem;
+      color: #333;
+    }
+
+    h2 {
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.02em;
+    }
+
+    .form-group {
+      margin-bottom: 0.6rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.85);
+      margin-bottom: 0.2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.45rem 0.6rem;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: rgba(255,255,255,0.95);
+      color: #333;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: white;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.4);
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    button {
+      flex: 1;
+      padding: 0.5rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.5; cursor: default; }
+
+    #save-btn {
+      background: white;
+      color: #667eea;
+    }
+
+    #cancel-btn {
+      background: rgba(255,255,255,0.2);
+      color: white;
+    }
+
+    #status {
+      font-size: 0.8rem;
+      margin-top: 0.5rem;
+      padding: 0.35rem 0.5rem;
+      border-radius: 5px;
+      text-align: center;
+    }
+
+    #status.hidden { display: none; }
+    #status.success { background: rgba(72,187,120,0.9); color: white; }
+    #status.error { background: rgba(245,101,101,0.9); color: white; }
+
+    #no-config {
+      color: rgba(255,255,255,0.9);
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 0.5rem 0;
+    }
+
+    #no-config a {
+      color: white;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <h2>Add Current Page</h2>
+
+  <div id="no-config" class="hidden">
+    No bookmark config found. <a id="settings-link" href="#">Open Settings</a>
+  </div>
+
+  <div id="form-area">
+    <div class="form-group">
+      <label for="bm-title">Title</label>
+      <input type="text" id="bm-title" placeholder="Page title">
+    </div>
+    <div class="form-group">
+      <label for="bm-url">URL</label>
+      <input type="text" id="bm-url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+      <label for="bm-page">Page</label>
+      <select id="bm-page"></select>
+    </div>
+    <div class="form-group">
+      <label for="bm-folder">Folder</label>
+      <select id="bm-folder"></select>
+    </div>
+    <div class="form-group hidden" id="new-folder-group">
+      <label for="bm-new-folder">New Folder Name</label>
+      <input type="text" id="bm-new-folder" placeholder="Folder name">
+    </div>
+    <div class="actions">
+      <button id="cancel-btn">Cancel</button>
+      <button id="save-btn">Add Bookmark</button>
+    </div>
+    <div id="status" class="hidden"></div>
+  </div>
+
+  <script src="bookmark-db.js"></script>
+  <script src="screenshot-db.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

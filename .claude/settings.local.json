@@ -13,7 +13,16 @@
       "Bash(py --version)",
       "Bash(python -m venv .venv)",
       "Bash(.venv/Scripts/python -c ' *)",
-      "Bash(grep -E \"\\\\.\\(js|json\\)$\")"
+      "Bash(grep -E \"\\\\.\\(js|json\\)$\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:marketplace.visualstudio.com)",
+      "Bash(git mv *)",
+      "Bash(mv /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/extension-amo-*.zip /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/dist/)",
+      "Bash(mv /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/web-ext-artifacts/*.xpi /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/dist/)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

@@ -6,6 +6,14 @@ const githubSync = new GitHubSync();
 // In-memory config mirror — always reflects what's in BookmarkDB
 let currentConfig = null;
 
+// Currently active page id — restored from localStorage so refreshes stay on the same page
+let currentPageId = localStorage.getItem('activePageId') || null;
+
+function setActivePage(id) {
+  currentPageId = id;
+  localStorage.setItem('activePageId', id);
+}
+
 // DOM elements
 const bookmarksContainer = document.getElementById('bookmarks-container');
 const noConfigDiv = document.getElementById('no-config');
@@ -19,17 +27,44 @@ const contextMenu = document.getElementById('context-menu');
 const ctxRemove = document.getElementById('ctx-remove');
 const ctxAddLink = document.getElementById('ctx-add-link');
 const ctxEdit = document.getElementById('ctx-edit');
+const ctxShrinkToFit = document.getElementById('ctx-shrink-to-fit');
+const ctxMovePage = document.getElementById('ctx-move-page');
 const ctxRefreshScreenshot = document.getElementById('ctx-refresh-screenshot');
+const ctxPageSubmenu = document.getElementById('ctx-page-submenu');
+const ctxPageSubmenuList = document.getElementById('ctx-page-submenu-list');
+const pageTabs = document.getElementById('page-tabs');
 
 // Context menu state
 let ctxTarget = null; // { folderName, bookmarkUrl?, type: 'bookmark'|'folder' }
+
+// Migrate legacy { folders: [...] } config to { pages: [...] } format
+function ensurePages(config) {
+  if (!config) return config;
+  if (!config.pages) {
+    config.pages = [{ id: 'page-1', name: 'Bookmarks', folders: config.folders || [] }];
+    delete config.folders;
+  }
+  return config;
+}
+
+// Return the active page object; defaults to first page if currentPageId is unset
+function getActivePage(config) {
+  if (!config || !config.pages || config.pages.length === 0) return null;
+  let page = config.pages.find(p => p.id === currentPageId);
+  if (!page) {
+    page = config.pages[0];
+    setActivePage(page.id);
+  }
+  return page;
+}
 
 // Return the current config from memory, BookmarkDB, or GitHub (in that order)
 async function getConfig() {
   if (currentConfig) return currentConfig;
   const stored = await BookmarkDB.get();
-  if (stored) { currentConfig = stored; return stored; }
+  if (stored) { currentConfig = ensurePages(stored); return currentConfig; }
   const fetched = await githubSync.fetchConfig();
+  ensurePages(fetched);
   await BookmarkDB.put(fetched);
   browser.storage.local.set({ cachedBookmarks: fetched }).catch(() => {});
   currentConfig = fetched;
@@ -39,15 +74,16 @@ async function getConfig() {
 // Apply a config mutation locally: write to BookmarkDB, update cache, re-render.
 // GitHub sync happens on the 60s interval or manual button — not here.
 async function applyLocalChange(config) {
+  ensurePages(config);
   currentConfig = config;
   await BookmarkDB.put(config);
   browser.storage.local.set({ cachedBookmarks: config }).catch(() => {});
-  renderBookmarks(config);
+  await renderBookmarks(config);
 }
 
 // Push the local BookmarkDB config to GitHub
 async function syncToGitHub() {
-  const config = await BookmarkDB.get();
+  const config = currentConfig || await BookmarkDB.get();
   if (!config) return;
 
   syncBtn.classList.add('syncing');
@@ -93,6 +129,9 @@ browser.runtime.onMessage.addListener((message) => {
 // Drag-drop state
 let dragState = null; // { type: 'bookmark', folderIndex, bookmarkIndex }
 
+// Page tab drag-to-reorder state
+let tabDragFromIndex = null;
+
 // Free-floating folder drag state
 let folderMoveState = null; // { folderDiv, folderName, startMouseX, startMouseY, startLeft, startTop }
 
@@ -109,8 +148,9 @@ async function moveBookmark(srcFolderIdx, srcBmIdx, dstFolderIdx, dstBmIdx, inse
   ddLog('called', { srcFolderIdx, srcBmIdx, dstFolderIdx, dstBmIdx, insertBefore });
   try {
     const config = await getConfig();
-    const srcFolder = config.folders[srcFolderIdx];
-    const dstFolder = config.folders[dstFolderIdx];
+    const folders = getActivePage(config).folders;
+    const srcFolder = folders[srcFolderIdx];
+    const dstFolder = folders[dstFolderIdx];
     ddLog('config before', {
       srcFolderName: srcFolder?.name,
       srcBookmarks: srcFolder?.bookmarks?.map(b => b.title),
@@ -145,8 +185,9 @@ async function moveBookmarkToFolder(srcFolderIdx, srcBmIdx, dstFolderIdx) {
   ddLog('called', { srcFolderIdx, srcBmIdx, dstFolderIdx });
   try {
     const config = await getConfig();
-    const srcFolder = config.folders[srcFolderIdx];
-    const dstFolder = config.folders[dstFolderIdx];
+    const folders = getActivePage(config).folders;
+    const srcFolder = folders[srcFolderIdx];
+    const dstFolder = folders[dstFolderIdx];
     ddLog('config before', {
       srcFolderName: srcFolder?.name,
       srcBookmarks: srcFolder?.bookmarks?.map(b => b.title),
@@ -177,16 +218,17 @@ async function reorderFolder(srcIdx, dstIdx, insertBefore) {
   ddLog('called', { srcIdx, dstIdx, insertBefore });
   try {
     const config = await getConfig();
-    ddLog('folders before', config.folders.map(f => f.name));
-    const [folder] = config.folders.splice(srcIdx, 1);
+    const folders = getActivePage(config).folders;
+    ddLog('folders before', folders.map(f => f.name));
+    const [folder] = folders.splice(srcIdx, 1);
     ddLog('spliced folder', folder.name);
     let insertIdx = dstIdx;
     if (srcIdx < dstIdx) insertIdx--;
     if (!insertBefore) insertIdx++;
-    insertIdx = Math.max(0, Math.min(insertIdx, config.folders.length));
+    insertIdx = Math.max(0, Math.min(insertIdx, folders.length));
     ddLog('inserting at index', insertIdx);
-    config.folders.splice(insertIdx, 0, folder);
-    ddLog('folders after', config.folders.map(f => f.name));
+    folders.splice(insertIdx, 0, folder);
+    ddLog('folders after', folders.map(f => f.name));
     await applyLocalChange(config);
     ddLog('local change applied');
   } catch (error) {
@@ -201,6 +243,8 @@ function showContextMenu(x, y, target) {
   contextMenu.style.left = `${x}px`;
   contextMenu.style.top = `${y}px`;
   ctxAddLink.classList.toggle('hidden', target.type !== 'folder');
+  ctxShrinkToFit.classList.toggle('hidden', target.type !== 'folder');
+  ctxMovePage.classList.toggle('hidden', target.type !== 'folder');
   ctxRemove.classList.toggle('hidden', target.type !== 'bookmark');
   ctxRefreshScreenshot.classList.toggle('hidden', target.type !== 'bookmark');
   ctxEdit.classList.remove('hidden');
@@ -209,11 +253,117 @@ function showContextMenu(x, y, target) {
 
 function hideContextMenu() {
   contextMenu.classList.add('hidden');
+  ctxPageSubmenu.classList.add('hidden');
   ctxTarget = null;
 }
 
+async function moveFolderToPage(folderName, targetPageId) {
+  try {
+    const config = await getConfig();
+    const srcPage = getActivePage(config);
+    const folderIdx = srcPage.folders.findIndex(f => f.name === folderName);
+    if (folderIdx === -1) return;
+    const dstPage = config.pages.find(p => p.id === targetPageId);
+    if (!dstPage) return;
+    const [folder] = srcPage.folders.splice(folderIdx, 1);
+    dstPage.folders = dstPage.folders || [];
+    dstPage.folders.push(folder);
+    await applyLocalChange(config);
+    showStatus(`Folder moved to "${dstPage.name}"`, 'success');
+  } catch (err) {
+    showStatus(`Error: ${err.message}`, 'error');
+  }
+}
+
+ctxMovePage.addEventListener('mouseenter', () => {
+  if (!ctxTarget || ctxTarget.type !== 'folder' || !currentConfig) return;
+  ctxPageSubmenuList.innerHTML = '';
+  currentConfig.pages.forEach(page => {
+    const li = document.createElement('li');
+    li.className = 'ctx-page-option' + (page.id === currentPageId ? ' current-page' : '');
+    li.textContent = page.id === currentPageId ? `${page.name} (current)` : page.name;
+    if (page.id !== currentPageId) {
+      li.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const folderName = ctxTarget.folderName;
+        const targetPageId = page.id;
+        hideContextMenu();
+        moveFolderToPage(folderName, targetPageId);
+      });
+    }
+    ctxPageSubmenuList.appendChild(li);
+  });
+
+  const rect = ctxMovePage.getBoundingClientRect();
+  ctxPageSubmenu.style.top = `${rect.top}px`;
+  ctxPageSubmenu.style.left = `${rect.right + 4}px`;
+  ctxPageSubmenu.classList.remove('hidden');
+});
+
+ctxMovePage.addEventListener('mouseleave', (e) => {
+  if (!ctxPageSubmenu.contains(e.relatedTarget)) {
+    ctxPageSubmenu.classList.add('hidden');
+  }
+});
+
+ctxPageSubmenu.addEventListener('mouseleave', (e) => {
+  if (e.relatedTarget !== ctxMovePage) {
+    ctxPageSubmenu.classList.add('hidden');
+  }
+});
+
 document.addEventListener('click', hideContextMenu);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu(); });
+
+ctxShrinkToFit.addEventListener('click', async () => {
+  if (!ctxTarget) return;
+  const { folderName, folderDiv } = ctxTarget;
+  hideContextMenu();
+  try {
+    const config = await getConfig();
+    const activePage = getActivePage(config);
+    const cfgFolder = activePage.folders.find(f => f.name === folderName);
+    if (!cfgFolder || !folderDiv) return;
+
+    const folderBody = folderDiv.querySelector('.folder-body');
+    const items = folderDiv.querySelectorAll('.bookmark');
+
+    if (items.length > 0 && folderBody) {
+      const folderRect = folderDiv.getBoundingClientRect();
+      const bodyStyle = getComputedStyle(folderBody);
+      const padRight = parseFloat(bodyStyle.paddingRight);
+      const padBottom = parseFloat(bodyStyle.paddingBottom);
+
+      let maxRight = 0;
+      let maxBottom = 0;
+      for (const item of items) {
+        const r = item.getBoundingClientRect();
+        maxRight = Math.max(maxRight, r.right - folderRect.left);
+        maxBottom = Math.max(maxBottom, r.bottom - folderRect.top);
+      }
+
+      const newW = Math.ceil(maxRight + padRight);
+      const newH = Math.ceil(maxBottom + padBottom);
+
+      cfgFolder.rw = newW;
+      cfgFolder.rh = newH;
+      await applyLocalChange(config);
+
+      folderDiv.style.width = `${newW}px`;
+      folderDiv.style.height = `${newH}px`;
+      folderDiv.classList.add('has-explicit-size');
+    } else {
+      delete cfgFolder.rw;
+      delete cfgFolder.rh;
+      await applyLocalChange(config);
+      folderDiv.style.removeProperty('width');
+      folderDiv.style.removeProperty('height');
+      folderDiv.classList.remove('has-explicit-size');
+    }
+  } catch (err) {
+    showStatus(`Error: ${err.message}`, 'error');
+  }
+});
 
 ctxAddLink.addEventListener('click', async () => {
   if (!ctxTarget) return;
@@ -229,11 +379,12 @@ ctxRemove.addEventListener('click', async () => {
 
   try {
     const config = await getConfig();
-    const folder = config.folders.find(f => f.name === folderName);
+    const activePage = getActivePage(config);
+    const folder = activePage.folders.find(f => f.name === folderName);
     if (folder) {
       folder.bookmarks = folder.bookmarks.filter(b => b.url !== bookmarkUrl);
       if (folder.bookmarks.length === 0) {
-        config.folders = config.folders.filter(f => f.name !== folderName);
+        activePage.folders = activePage.folders.filter(f => f.name !== folderName);
       }
     }
     await applyLocalChange(config);
@@ -293,11 +444,143 @@ const FOLDER_DEFAULT_COLS = 3;
 const FOLDER_DEFAULT_COL_W = 380;
 const FOLDER_DEFAULT_ROW_H = 300;
 
-// Render bookmarks
-function renderBookmarks(config) {
+// Render page tabs and the "+" add-page button
+function renderPageTabs(config) {
+  pageTabs.innerHTML = '';
+  if (!config || !config.pages) return;
+
+  config.pages.forEach((page, pageIndex) => {
+    const tab = document.createElement('button');
+    tab.className = 'page-tab' + (page.id === currentPageId ? ' active' : '');
+    tab.draggable = true;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = page.name;
+    nameSpan.title = 'Double-click to rename';
+    tab.appendChild(nameSpan);
+
+    // Delete button — only shown when more than one page exists
+    if (config.pages.length > 1) {
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'page-tab-close';
+      closeBtn.textContent = '×';
+      closeBtn.title = 'Delete page';
+      closeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete page "${page.name}"? All its folders and bookmarks will be removed.`)) return;
+        const cfg = await getConfig();
+        cfg.pages = cfg.pages.filter(p => p.id !== page.id);
+        if (currentPageId === page.id) setActivePage(cfg.pages[0].id);
+        await applyLocalChange(cfg);
+      });
+      tab.appendChild(closeBtn);
+    }
+
+    tab.addEventListener('click', async () => {
+      if (page.id === currentPageId) return;
+      setActivePage(page.id);
+      const cfg = await getConfig();
+      await renderBookmarks(cfg);
+    });
+
+    // Double-click tab name to rename
+    nameSpan.addEventListener('dblclick', async (e) => {
+      e.stopPropagation();
+      const newName = prompt('Rename page:', page.name);
+      if (!newName || newName.trim() === page.name) return;
+      const cfg = await getConfig();
+      const p = cfg.pages.find(pg => pg.id === page.id);
+      if (p) {
+        p.name = newName.trim();
+        await applyLocalChange(cfg);
+      }
+    });
+
+    // Drag-to-reorder tab events
+    tab.addEventListener('dragstart', (e) => {
+      tabDragFromIndex = pageIndex;
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => tab.classList.add('tab-dragging'));
+    });
+
+    tab.addEventListener('dragend', () => {
+      tabDragFromIndex = null;
+      tab.classList.remove('tab-dragging');
+      document.querySelectorAll('.page-tab.tab-drag-over-before, .page-tab.tab-drag-over-after')
+        .forEach(el => el.classList.remove('tab-drag-over-before', 'tab-drag-over-after'));
+    });
+
+    tab.addEventListener('dragover', (e) => {
+      if (tabDragFromIndex === null || tabDragFromIndex === pageIndex) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = tab.getBoundingClientRect();
+      tab.classList.remove('tab-drag-over-before', 'tab-drag-over-after');
+      tab.classList.add(e.clientX < rect.left + rect.width / 2 ? 'tab-drag-over-before' : 'tab-drag-over-after');
+    });
+
+    tab.addEventListener('dragleave', (e) => {
+      if (!tab.contains(e.relatedTarget)) {
+        tab.classList.remove('tab-drag-over-before', 'tab-drag-over-after');
+      }
+    });
+
+    tab.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tab.classList.remove('tab-drag-over-before', 'tab-drag-over-after');
+      if (tabDragFromIndex === null || tabDragFromIndex === pageIndex) return;
+      const rect = tab.getBoundingClientRect();
+      const insertBefore = e.clientX < rect.left + rect.width / 2;
+      const cfg = await getConfig();
+      const [moved] = cfg.pages.splice(tabDragFromIndex, 1);
+      let insertIdx = pageIndex;
+      if (tabDragFromIndex < pageIndex) insertIdx--;
+      if (!insertBefore) insertIdx++;
+      insertIdx = Math.max(0, Math.min(insertIdx, cfg.pages.length));
+      cfg.pages.splice(insertIdx, 0, moved);
+      tabDragFromIndex = null;
+      await applyLocalChange(cfg);
+    });
+
+    pageTabs.appendChild(tab);
+  });
+
+  const addPageBtn = document.createElement('button');
+  addPageBtn.className = 'page-add-btn';
+  addPageBtn.textContent = '+';
+  addPageBtn.title = 'Add new page';
+  addPageBtn.addEventListener('click', async () => {
+    const cfg = await getConfig();
+    const name = prompt('New page name:', 'Page ' + (cfg.pages.length + 1));
+    if (!name || !name.trim()) return;
+    const id = 'page-' + Date.now();
+    cfg.pages.push({ id, name: name.trim(), folders: [] });
+    setActivePage(id);
+    await applyLocalChange(cfg);
+  });
+  pageTabs.appendChild(addPageBtn);
+}
+
+// Render bookmarks for the active page
+async function renderBookmarks(config) {
+  renderPageTabs(config);
+
+  // Pre-load all screenshots before touching the DOM to avoid flash
+  const screenshotMap = new Map();
+  const activePage = getActivePage(config);
+  const folders = (activePage && activePage.folders) || [];
+
+  if (folders.length > 0) {
+    const urls = folders.flatMap(f => (f.bookmarks || []).map(b => b.url));
+    await Promise.all(urls.map(url =>
+      ScreenshotDB.get(url).then(dataUrl => { if (dataUrl) screenshotMap.set(url, dataUrl); }).catch(() => {})
+    ));
+  }
+
   bookmarksContainer.innerHTML = '';
 
-  if (!config || !config.folders || config.folders.length === 0) {
+  if (!config || !config.pages || folders.length === 0) {
     noConfigDiv.classList.remove('hidden');
     bookmarksContainer.classList.add('hidden');
     return;
@@ -306,7 +589,7 @@ function renderBookmarks(config) {
   noConfigDiv.classList.add('hidden');
   bookmarksContainer.classList.remove('hidden');
 
-  config.folders.forEach((folder, fi) => {
+  folders.forEach((folder, fi) => {
     const folderDiv = document.createElement('div');
     folderDiv.className = 'folder';
     if (folder.width) folderDiv.style.minWidth = `${folder.width}px`;
@@ -325,22 +608,57 @@ function renderBookmarks(config) {
       folderDiv.classList.add('has-explicit-size');
     }
 
-    // --- Folder name (context menu + bookmark drop-into-folder target) ---
-    const folderName = document.createElement('div');
-    folderName.className = 'folder-name';
+    if (folder.collapsed) folderDiv.classList.add('collapsed');
 
-    const nameText = document.createElement('span');
-    nameText.textContent = folder.name;
+    // --- Titlebar (drag handle + title + collapse button) ---
+    const titlebar = document.createElement('div');
+    titlebar.className = 'folder-titlebar';
 
-    const dragHandle = document.createElement('span');
-    dragHandle.className = 'folder-drag-handle';
-    dragHandle.textContent = '⠿';
-    dragHandle.title = 'Drag to move folder';
+    const titleIcon = document.createElement('span');
+    titleIcon.className = 'folder-title-icon';
+    const resolvedIcon = folder.icon !== undefined ? folder.icon : currentDefaultFolderIcon;
+    titleIcon.textContent = resolvedIcon;
+    if (!resolvedIcon) titleIcon.style.display = 'none';
 
-    dragHandle.addEventListener('mousedown', (e) => {
+    const titleText = document.createElement('span');
+    titleText.className = 'folder-title-text';
+    titleText.textContent = folder.name;
+
+    const titlebarControls = document.createElement('div');
+    titlebarControls.className = 'folder-titlebar-controls';
+
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'folder-collapse-btn';
+    collapseBtn.textContent = folder.collapsed ? '+' : '−';
+    collapseBtn.title = folder.collapsed ? 'Expand' : 'Collapse';
+
+    collapseBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+    collapseBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const config = await getConfig();
+      const activePage = getActivePage(config);
+      const cfgFolder = activePage.folders.find(f => f.name === folder.name);
+      if (cfgFolder) {
+        cfgFolder.collapsed = !cfgFolder.collapsed;
+        await applyLocalChange(config);
+      }
+    });
+
+    titlebarControls.appendChild(collapseBtn);
+    titlebar.appendChild(titleIcon);
+    titlebar.appendChild(titleText);
+    titlebar.appendChild(titlebarControls);
+
+    titlebar.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
-      e.stopPropagation();
+      // Fix the folder's width before dragging so CSS doesn't auto-constrain it
+      // to the remaining container space as it approaches the right edge.
+      if (!folderDiv.classList.contains('has-explicit-size')) {
+        // Lock to pixels so the folder width doesn't change as left shifts during drag.
+        // CSS width:max-content ensures getBoundingClientRect gives the unconstrained width.
+        folderDiv.style.width = `${Math.ceil(folderDiv.getBoundingClientRect().width)}px`;
+      }
       const containerRect = bookmarksContainer.getBoundingClientRect();
       const folderRect = folderDiv.getBoundingClientRect();
       folderMoveState = {
@@ -354,39 +672,40 @@ function renderBookmarks(config) {
       folderDiv.classList.add('is-moving');
     });
 
-    folderName.appendChild(nameText);
-    folderName.appendChild(dragHandle);
-
-    folderName.addEventListener('contextmenu', (e) => {
+    titlebar.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      showContextMenu(e.clientX, e.clientY, { type: 'folder', folderName: folder.name });
+      showContextMenu(e.clientX, e.clientY, { type: 'folder', folderName: folder.name, folderDiv });
     });
 
-    folderName.addEventListener('dragover', (e) => {
+    titlebar.addEventListener('dragover', (e) => {
       if (!dragState || dragState.type !== 'bookmark' || dragState.folderIndex === fi) return;
       e.preventDefault();
       e.stopPropagation();
-      folderName.classList.add('drag-over');
+      titlebar.classList.add('drag-over');
     });
 
-    folderName.addEventListener('dragleave', () => {
-      folderName.classList.remove('drag-over');
+    titlebar.addEventListener('dragleave', () => {
+      titlebar.classList.remove('drag-over');
     });
 
-    folderName.addEventListener('drop', (e) => {
-      ddLog('folderName drop', { dstFi: fi, folderName: folder.name, dragState });
-      folderName.classList.remove('drag-over');
+    titlebar.addEventListener('drop', (e) => {
+      ddLog('titlebar drop', { dstFi: fi, folderName: folder.name, dragState });
+      titlebar.classList.remove('drag-over');
       if (!dragState || dragState.type !== 'bookmark' || dragState.folderIndex === fi) {
-        ddLog('folderName drop IGNORED', { reason: !dragState ? 'no dragState' : dragState.type !== 'bookmark' ? `wrong type: ${dragState.type}` : 'same folder' });
+        ddLog('titlebar drop IGNORED', { reason: !dragState ? 'no dragState' : dragState.type !== 'bookmark' ? `wrong type: ${dragState.type}` : 'same folder' });
         return;
       }
       e.preventDefault();
       e.stopPropagation();
       const { folderIndex: srcFi, bookmarkIndex: srcBi } = dragState;
       dragState = null;
-      ddLog('folderName drop ACCEPTED', { srcFi, srcBi, dstFi: fi });
+      ddLog('titlebar drop ACCEPTED', { srcFi, srcBi, dstFi: fi });
       moveBookmarkToFolder(srcFi, srcBi, fi);
     });
+
+    // --- Folder body (collapsible) ---
+    const folderBody = document.createElement('div');
+    folderBody.className = 'folder-body';
 
     // --- Bookmarks grid ---
     const bookmarksList = document.createElement('ul');
@@ -500,9 +819,8 @@ function renderBookmarks(config) {
         icon.onerror = () => { icon.style.display = 'none'; };
 
         bookmarkItem.dataset.url = bookmark.url;
-        ScreenshotDB.get(bookmark.url).then(dataUrl => {
-          if (dataUrl) applyScreenshot(bookmarkItem, icon, dataUrl);
-        }).catch(() => {});
+        const screenshotDataUrl = screenshotMap.get(bookmark.url);
+        if (screenshotDataUrl) applyScreenshot(bookmarkItem, icon, screenshotDataUrl);
 
         const title = document.createElement('span');
         title.className = 'bookmark-title';
@@ -539,8 +857,10 @@ function renderBookmarks(config) {
       folderDiv.classList.add('is-resizing');
     });
 
-    folderDiv.appendChild(folderName);
-    folderDiv.appendChild(bookmarksList);
+    folderBody.appendChild(bookmarksList);
+
+    folderDiv.appendChild(titlebar);
+    folderDiv.appendChild(folderBody);
     folderDiv.appendChild(resizeHandle);
     bookmarksContainer.appendChild(folderDiv);
   });
@@ -559,8 +879,9 @@ async function loadBookmarks() {
       browser.storage.local.set({ cachedBookmarks: config }).catch(() => {});
     }
 
+    ensurePages(config);
     currentConfig = config;
-    renderBookmarks(config);
+    await renderBookmarks(config);
   } catch (error) {
     console.error('Error loading bookmarks:', error);
 
@@ -568,8 +889,9 @@ async function loadBookmarks() {
     const result = await browser.storage.local.get('cachedBookmarks').catch(() => ({}));
     const cached = result.cachedBookmarks || null;
     if (cached) {
+      ensurePages(cached);
       currentConfig = cached;
-      renderBookmarks(cached);
+      await renderBookmarks(cached);
       await BookmarkDB.put(cached).catch(() => {});
     } else {
       noConfigDiv.classList.remove('hidden');
@@ -592,7 +914,8 @@ async function openAddModal(preselectFolder = null) {
   let folders = [];
   try {
     const config = await getConfig();
-    folders = (config && config.folders) || [];
+    const activePage = getActivePage(config);
+    folders = (activePage && activePage.folders) || [];
   } catch (e) {
     // no folders yet
   }
@@ -618,6 +941,36 @@ function closeAddModal() {
   addModal.classList.add('hidden');
 }
 
+const FOLDER_ICONS = ['📁', '📂', '🗂️', '📋', '📌', '⭐', '🔖', '💼', '🎯', '🔥', '❤️', '🌟', '✅', '🚀', '🎮', '📚', '🎵', '🎨', '🏠', '🛠️'];
+let currentDefaultFolderIcon = '📁';
+
+function buildIconPicker(container, selectedValue, onChange) {
+  container.innerHTML = '';
+  const noneBtn = document.createElement('button');
+  noneBtn.type = 'button';
+  noneBtn.className = 'icon-picker-btn' + (selectedValue === '' ? ' active' : '');
+  noneBtn.textContent = '∅';
+  noneBtn.title = 'No icon';
+  noneBtn.addEventListener('click', () => {
+    container.querySelectorAll('.icon-picker-btn').forEach(b => b.classList.remove('active'));
+    noneBtn.classList.add('active');
+    onChange('');
+  });
+  container.appendChild(noneBtn);
+  for (const icon of FOLDER_ICONS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-picker-btn' + (selectedValue === icon ? ' active' : '');
+    btn.textContent = icon;
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.icon-picker-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      onChange(icon);
+    });
+    container.appendChild(btn);
+  }
+}
+
 // Edit modal elements
 const editModal = document.getElementById('edit-modal');
 const editModalTitle = document.getElementById('edit-modal-title');
@@ -631,6 +984,8 @@ const editFolderWidthGroup = document.getElementById('edit-folder-width-group');
 const editFolderWidthInput = document.getElementById('edit-folder-width');
 const editFolderMinHeightGroup = document.getElementById('edit-folder-min-height-group');
 const editFolderMinHeightInput = document.getElementById('edit-folder-min-height');
+const editFolderIconGroup = document.getElementById('edit-folder-icon-group');
+const editFolderIconPicker = document.getElementById('edit-folder-icon-picker');
 const editBmWidthGroup = document.getElementById('edit-bm-width-group');
 const editBmWidthInput = document.getElementById('edit-bm-width');
 const editBmHeightGroup = document.getElementById('edit-bm-height-group');
@@ -640,6 +995,7 @@ const editModalCancelBtn = document.getElementById('edit-modal-cancel-btn');
 const editModalStatus = document.getElementById('edit-modal-status');
 
 let editTarget = null;
+let editFolderIconValue = '📁';
 
 function openEditModal(target) {
   editTarget = target;
@@ -657,20 +1013,26 @@ function openEditModal(target) {
     editBmUrlGroup.classList.add('hidden');
     editBmWidthGroup.classList.add('hidden');
     editBmHeightGroup.classList.add('hidden');
-    const folder = currentConfig && currentConfig.folders.find(f => f.name === target.folderName);
+    editFolderIconGroup.classList.remove('hidden');
+    const activePage = currentConfig && getActivePage(currentConfig);
+    const folder = activePage && activePage.folders.find(f => f.name === target.folderName);
     editFolderNameInput.value = target.folderName;
     editFolderWidthInput.value = (folder && folder.width) || '';
     editFolderMinHeightInput.value = (folder && folder.minHeight) || '';
+    editFolderIconValue = (folder && folder.icon !== undefined) ? folder.icon : currentDefaultFolderIcon;
+    buildIconPicker(editFolderIconPicker, editFolderIconValue, (v) => { editFolderIconValue = v; });
   } else {
     editModalTitle.textContent = 'Edit Bookmark';
     editFolderNameGroup.classList.add('hidden');
     editFolderWidthGroup.classList.add('hidden');
     editFolderMinHeightGroup.classList.add('hidden');
+    editFolderIconGroup.classList.add('hidden');
     editBmTitleGroup.classList.remove('hidden');
     editBmUrlGroup.classList.remove('hidden');
     editBmWidthGroup.classList.remove('hidden');
     editBmHeightGroup.classList.remove('hidden');
-    const folder = currentConfig && currentConfig.folders.find(f => f.name === target.folderName);
+    const activePage = currentConfig && getActivePage(currentConfig);
+    const folder = activePage && activePage.folders.find(f => f.name === target.folderName);
     const bookmark = folder && folder.bookmarks.find(b => b.url === target.bookmarkUrl);
     editBmTitleInput.value = bookmark ? bookmark.title : '';
     editBmUrlInput.value = target.bookmarkUrl;
@@ -702,20 +1064,22 @@ async function saveEdit() {
   if (!editTarget) return;
   try {
     const config = await getConfig();
+    const activePage = getActivePage(config);
 
     if (editTarget.type === 'folder') {
       const newName = editFolderNameInput.value.trim();
       if (!newName) { showEditModalError('Please enter a folder name.'); editModalSaveBtn.disabled = false; editModalSaveBtn.textContent = 'Save'; return; }
-      if (newName !== editTarget.folderName && config.folders.find(f => f.name === newName)) {
+      if (newName !== editTarget.folderName && activePage.folders.find(f => f.name === newName)) {
         showEditModalError('A folder with that name already exists.'); editModalSaveBtn.disabled = false; editModalSaveBtn.textContent = 'Save'; return;
       }
-      const folder = config.folders.find(f => f.name === editTarget.folderName);
+      const folder = activePage.folders.find(f => f.name === editTarget.folderName);
       if (folder) {
         folder.name = newName;
         const fw = parseInt(editFolderWidthInput.value, 10);
         folder.width = fw > 0 ? fw : undefined;
         const fh = parseInt(editFolderMinHeightInput.value, 10);
         folder.minHeight = fh > 0 ? fh : undefined;
+        folder.icon = editFolderIconValue;
       }
     } else {
       const newTitle = editBmTitleInput.value.trim();
@@ -723,7 +1087,7 @@ async function saveEdit() {
       if (!newTitle) { showEditModalError('Please enter a title.'); editModalSaveBtn.disabled = false; editModalSaveBtn.textContent = 'Save'; return; }
       if (!newUrl) { showEditModalError('Please enter a URL.'); editModalSaveBtn.disabled = false; editModalSaveBtn.textContent = 'Save'; return; }
       if (!/^https?:\/\//i.test(newUrl)) newUrl = 'https://' + newUrl;
-      const folder = config.folders.find(f => f.name === editTarget.folderName);
+      const folder = activePage.folders.find(f => f.name === editTarget.folderName);
       const bookmark = folder && folder.bookmarks.find(b => b.url === editTarget.bookmarkUrl);
       if (bookmark) {
         bookmark.title = newTitle;
@@ -768,13 +1132,15 @@ async function saveNewBookmark() {
   }
 
   try {
-    const config = await getConfig() || { folders: [] };
+    const config = await getConfig() || { pages: [{ id: 'page-1', name: 'Bookmarks', folders: [] }] };
+    ensurePages(config);
+    const activePage = getActivePage(config);
     const bookmark = { title, url };
 
     if (folderVal === '__new__') {
-      config.folders.push({ name: newFolderName, bookmarks: [bookmark] });
+      activePage.folders.push({ name: newFolderName, bookmarks: [bookmark] });
     } else {
-      const folder = config.folders.find(f => f.name === folderVal);
+      const folder = activePage.folders.find(f => f.name === folderVal);
       if (folder) {
         folder.bookmarks = folder.bookmarks || [];
         folder.bookmarks.push(bookmark);
@@ -814,6 +1180,17 @@ settingsLink.addEventListener('click', (e) => {
   browser.runtime.openOptionsPage();
 });
 
+// Reset all folder positions on the active page
+document.getElementById('reset-positions-btn').addEventListener('click', async () => {
+  const config = await getConfig();
+  const activePage = getActivePage(config);
+  activePage.folders.forEach(f => {
+    delete f.x; delete f.y; delete f.rw; delete f.rh;
+  });
+  await applyLocalChange(config);
+  showStatus('Folder positions reset!', 'success');
+});
+
 const FOLDER_MIN_W = 150;
 const FOLDER_MIN_H = 80;
 
@@ -842,7 +1219,8 @@ document.addEventListener('mouseup', async (e) => {
     const newY = Math.round(startTop + (e.clientY - startMouseY));
     try {
       const config = await getConfig();
-      const cfgFolder = config.folders.find(f => f.name === folderName);
+      const activePage = getActivePage(config);
+      const cfgFolder = activePage.folders.find(f => f.name === folderName);
       if (cfgFolder) { cfgFolder.x = newX; cfgFolder.y = newY; await applyLocalChange(config); }
     } catch (err) { console.error('[FolderMove] failed to save position', err); }
   }
@@ -855,11 +1233,47 @@ document.addEventListener('mouseup', async (e) => {
     const newH = Math.round(Math.max(FOLDER_MIN_H, startH + (e.clientY - startMouseY)));
     try {
       const config = await getConfig();
-      const cfgFolder = config.folders.find(f => f.name === folderName);
+      const activePage = getActivePage(config);
+      const cfgFolder = activePage.folders.find(f => f.name === folderName);
       if (cfgFolder) { cfgFolder.rw = newW; cfgFolder.rh = newH; await applyLocalChange(config); }
     } catch (err) { console.error('[FolderResize] failed to save size', err); }
   }
 });
+
+const BG_THEMES = {
+  purple:   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  blue:     'linear-gradient(135deg, #2196F3 0%, #0d47a1 100%)',
+  sunset:   'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  ocean:    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  forest:   'linear-gradient(135deg, #48bb78 0%, #276749 100%)',
+  dark:     'linear-gradient(135deg, #2d3748 0%, #1a202c 100%)',
+  midnight: 'linear-gradient(135deg, #141e30 0%, #243b55 100%)',
+  candy:    'linear-gradient(135deg, #f7971e 0%, #ffd200 100%)',
+};
+
+function applyBackground(settings) {
+  const theme = settings.bgTheme || 'purple';
+  if (theme === 'solid') {
+    document.body.style.background = settings.bgCustomColor || '#667eea';
+  } else if (theme === 'image' && settings.bgImageUrl) {
+    document.body.style.background = `url("${settings.bgImageUrl.replace(/"/g, '%22')}") center/cover no-repeat fixed`;
+  } else {
+    document.body.style.background = BG_THEMES[theme] || BG_THEMES.purple;
+  }
+}
+
+async function applyImportedTheme(themeId, root) {
+  const themes = await githubSync.loadImportedThemes();
+  const theme = themes.find(t => t.id === themeId);
+  if (!theme) return;
+  document.body.style.background = theme.bgColor;
+  root.setProperty('--folder-titlebar-color1', theme.titlebarColor1);
+  root.setProperty('--folder-titlebar-color2', theme.titlebarColor2);
+  root.setProperty('--folder-bg', theme.folderBg);
+  root.setProperty('--folder-text-color', theme.folderTextColor);
+  root.setProperty('--folder-text-hover-color', theme.titlebarColor1);
+  root.setProperty('--folder-title-color', theme.titleColor);
+}
 
 // Load bookmarks on page load
 async function initialize() {
@@ -871,8 +1285,30 @@ async function initialize() {
   root.setProperty('--bookmark-icon-size', `${Math.round((settings.bookmarkIconSize || 28) * scale)}px`);
   if (settings.defaultFolderMinWidth) root.setProperty('--default-folder-min-width', `${settings.defaultFolderMinWidth}px`);
   if (settings.defaultFolderMinHeight) root.setProperty('--default-folder-min-height', `${settings.defaultFolderMinHeight}px`);
+  currentDefaultFolderIcon = settings.defaultFolderIcon !== undefined ? settings.defaultFolderIcon : '📁';
   root.setProperty('--default-bm-width', `${Math.round((settings.defaultBmWidth || 80) * scale)}px`);
   root.setProperty('--default-bm-height', `${Math.round((settings.defaultBmHeight || 80) * scale)}px`);
+  if (settings.folderTitleFont) root.setProperty('--folder-title-font-family', settings.folderTitleFont);
+  root.setProperty('--folder-title-font-size', `${settings.folderTitleFontSize || 13}px`);
+  if (settings.bookmarkTitleFont) root.setProperty('--bookmark-title-font-family', settings.bookmarkTitleFont);
+  root.setProperty('--bookmark-title-font-size', `${settings.bookmarkTitleFontSize || 10}px`);
+
+  // Apply appearance theme
+  const bgTheme = settings.bgTheme || 'purple';
+  if (bgTheme.startsWith('imported:')) {
+    await applyImportedTheme(bgTheme.slice('imported:'.length), root);
+  } else {
+    applyBackground(settings);
+    root.setProperty('--navbar-color1', settings.navbarColor1 || '#3a1a6e');
+    root.setProperty('--navbar-color2', settings.navbarColor2 || '#2d1157');
+    root.setProperty('--navbar-text-color', settings.navbarTextColor || '#ffffff');
+    root.setProperty('--folder-titlebar-color1', settings.folderTitlebarColor1 || '#667eea');
+    root.setProperty('--folder-titlebar-color2', settings.folderTitlebarColor2 || '#764ba2');
+    root.setProperty('--folder-bg', settings.folderBgColor || '#ffffff');
+    root.setProperty('--folder-text-color', settings.folderTextColor || '#4a5568');
+    root.setProperty('--folder-text-hover-color', settings.folderTitlebarColor1 || '#667eea');
+    root.setProperty('--folder-title-color', settings.folderTitleColor || '#ffffff');
+  }
 
   await loadBookmarks();
 

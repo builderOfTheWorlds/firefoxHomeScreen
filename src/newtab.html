@@ -7,32 +7,50 @@
   <link rel="stylesheet" href="newtab.css">
 </head>
 <body>
+  <header>
+    <div class="header-brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span>GitTabSync</span>
+    </div>
+
+    <div id="page-tabs" class="page-tabs"></div>
+
+    <div class="header-actions">
+      <button id="add-btn" class="add-btn" title="Add Bookmark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span class="btn-label">Add</span>
+      </button>
+      <span id="pending-indicator" class="pending-indicator hidden"></span>
+      <button id="sync-btn" class="sync-btn" title="Sync with GitHub">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        <span class="btn-label">Sync</span>
+      </button>
+      <button id="reset-positions-btn" class="reset-positions-btn" title="Reset All Folder Positions">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span class="btn-label">Reset</span>
+      </button>
+      <button id="settings-btn" class="settings-btn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v6m0 6v6m0-18a2 2 0 0 1 2 2v1m-4 0V3a2 2 0 0 1 2-2m0 18a2 2 0 0 1-2-2v-1m4 0v1a2 2 0 0 1-2 2M1 12h6m6 0h6M3 12a2 2 0 0 1 2-2h1m0 4H5a2 2 0 0 1-2-2m18 0a2 2 0 0 1-2 2h-1m0-4h1a2 2 0 0 1 2 2"/>
+        </svg>
+        <span class="btn-label">Settings</span>
+      </button>
+    </div>
+  </header>
+
   <div class="container">
-    <header>
-      <h1>Bookmarks</h1>
-      <div class="header-actions">
-        <button id="add-btn" class="add-btn" title="Add Bookmark">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-        </button>
-        <span id="pending-indicator" class="pending-indicator hidden"></span>
-        <button id="sync-btn" class="sync-btn" title="Sync with GitHub">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-          </svg>
-        </button>
-        <button id="settings-btn" class="settings-btn" title="Settings">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v6m0 6v6m0-18a2 2 0 0 1 2 2v1m-4 0V3a2 2 0 0 1 2-2m0 18a2 2 0 0 1-2-2v-1m4 0v1a2 2 0 0 1-2 2M1 12h6m6 0h6M3 12a2 2 0 0 1 2-2h1m0 4H5a2 2 0 0 1-2-2m18 0a2 2 0 0 1-2 2h-1m0-4h1a2 2 0 0 1 2 2"/>
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <div id="status-message" class="status-message hidden"></div>
-
     <div id="bookmarks-container" class="bookmarks-container">
       <!-- Bookmarks will be rendered here -->
     </div>
@@ -90,6 +108,11 @@
           <input type="number" id="edit-folder-min-height" min="0" placeholder="Leave blank for default" autocomplete="off">
           <small>Override min-height for this folder card (0 or blank = use default)</small>
         </div>
+        <div class="modal-group hidden" id="edit-folder-icon-group">
+          <label>Folder Icon</label>
+          <div class="icon-picker" id="edit-folder-icon-picker"></div>
+          <small>Choose an icon or select "None" for no icon</small>
+        </div>
         <div class="modal-group" id="edit-bm-title-group">
           <label for="edit-bm-title">Title</label>
           <input type="text" id="edit-bm-title" autocomplete="off">
@@ -121,10 +144,18 @@
     <ul>
       <li id="ctx-add-link">Add Link to Folder</li>
       <li id="ctx-edit">Edit</li>
+      <li id="ctx-shrink-to-fit">Shrink to Fit</li>
+      <li id="ctx-move-page">Move to Page ▶</li>
       <li id="ctx-refresh-screenshot">Refresh Screenshot</li>
       <li id="ctx-remove">Remove Bookmark</li>
     </ul>
   </div>
+
+  <div id="ctx-page-submenu" class="context-menu hidden">
+    <ul id="ctx-page-submenu-list"></ul>
+  </div>
+
+  <div id="status-message" class="status-message hidden"></div>
 
   <script src="screenshot-db.js"></script>
   <script src="bookmark-db.js"></script>

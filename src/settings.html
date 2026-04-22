@@ -91,6 +91,11 @@
         <h2>Folder Size Defaults</h2>
         <p class="section-description">Set default dimensions for all folder cards. Override per-folder via right-click → Edit.</p>
         <div class="form-group">
+          <label>Default Folder Icon</label>
+          <div class="icon-picker" id="default-folder-icon-picker"></div>
+          <small>Icon shown on all folders unless overridden per-folder (select "∅" for no icon)</small>
+        </div>
+        <div class="form-group">
           <label for="default-folder-min-width">Default Folder Min-Width <span id="default-folder-min-width-display">0</span>px</label>
           <input type="range" id="default-folder-min-width" min="0" max="800" step="10" value="0">
           <small>Minimum width for folder cards (0 = auto, controlled by grid columns)</small>
@@ -120,6 +125,131 @@
           <input type="range" id="default-bm-height" min="40" max="300" step="5" value="80">
           <small>Base height of bookmark tiles before scale is applied (default: 80px)</small>
         </div>
+      </div>
+
+      <div class="form-section">
+        <h2>Appearance</h2>
+
+        <h3 class="subsection-title">Background</h3>
+        <div class="form-group">
+          <label for="bg-theme">Background Theme</label>
+          <select id="bg-theme">
+            <option value="purple">Purple Gradient (default)</option>
+            <option value="blue">Blue Gradient</option>
+            <option value="sunset">Sunset</option>
+            <option value="ocean">Ocean</option>
+            <option value="forest">Forest</option>
+            <option value="dark">Dark</option>
+            <option value="midnight">Midnight</option>
+            <option value="candy">Candy</option>
+            <option value="solid">Solid Color</option>
+            <option value="image">Custom Image</option>
+          </select>
+        </div>
+        <div class="form-group" id="bg-color-group">
+          <label for="bg-custom-color">Background Color</label>
+          <input type="color" id="bg-custom-color" value="#667eea">
+        </div>
+        <div class="form-group" id="bg-image-group">
+          <label for="bg-image-url">Image URL</label>
+          <input type="text" id="bg-image-url" placeholder="https://example.com/image.jpg" autocomplete="off">
+          <small>Direct link to an image file (will be used as background)</small>
+        </div>
+
+        <h3 class="subsection-title">Navbar Colors</h3>
+        <div class="form-group color-picker-group">
+          <label for="navbar-color1">Navbar Gradient Start</label>
+          <div class="color-input-row">
+            <input type="color" id="navbar-color1" value="#3a1a6e">
+            <span class="color-hex-display" id="navbar-color1-display">#3a1a6e</span>
+          </div>
+        </div>
+        <div class="form-group color-picker-group">
+          <label for="navbar-color2">Navbar Gradient End</label>
+          <div class="color-input-row">
+            <input type="color" id="navbar-color2" value="#2d1157">
+            <span class="color-hex-display" id="navbar-color2-display">#2d1157</span>
+          </div>
+          <small>Set both to the same color for a solid navbar</small>
+        </div>
+        <div class="form-group color-picker-group">
+          <label for="navbar-text-color">Navbar Text &amp; Icon Color</label>
+          <div class="color-input-row">
+            <input type="color" id="navbar-text-color" value="#ffffff">
+            <span class="color-hex-display" id="navbar-text-color-display">#ffffff</span>
+          </div>
+        </div>
+
+        <h3 class="subsection-title">Folder Colors</h3>
+        <div class="form-group color-picker-group">
+          <label for="folder-titlebar-color1">Titlebar Gradient Start</label>
+          <div class="color-input-row">
+            <input type="color" id="folder-titlebar-color1" value="#667eea">
+            <span class="color-hex-display" id="folder-titlebar-color1-display">#667eea</span>
+          </div>
+        </div>
+        <div class="form-group color-picker-group">
+          <label for="folder-titlebar-color2">Titlebar Gradient End</label>
+          <div class="color-input-row">
+            <input type="color" id="folder-titlebar-color2" value="#764ba2">
+            <span class="color-hex-display" id="folder-titlebar-color2-display">#764ba2</span>
+          </div>
+          <small>Set both to the same color for a solid titlebar</small>
+        </div>
+        <div class="form-group color-picker-group">
+          <label for="folder-bg-color">Folder Background</label>
+          <div class="color-input-row">
+            <input type="color" id="folder-bg-color" value="#ffffff">
+            <span class="color-hex-display" id="folder-bg-color-display">#ffffff</span>
+          </div>
+        </div>
+        <div class="form-group color-picker-group">
+          <label for="folder-text-color">Bookmark Text Color</label>
+          <div class="color-input-row">
+            <input type="color" id="folder-text-color" value="#4a5568">
+            <span class="color-hex-display" id="folder-text-color-display">#4a5568</span>
+          </div>
+        </div>
+        <div class="form-group color-picker-group">
+          <label for="folder-title-color">Folder Title Text Color</label>
+          <div class="color-input-row">
+            <input type="color" id="folder-title-color" value="#ffffff">
+            <span class="color-hex-display" id="folder-title-color-display">#ffffff</span>
+          </div>
+        </div>
+
+        <h3 class="subsection-title">Typography</h3>
+        <div class="form-group">
+          <label for="folder-title-font">Folder Name Typeface</label>
+          <select id="folder-title-font"></select>
+          <div class="font-preview" id="folder-title-font-preview">AaBbCcDd 123</div>
+        </div>
+        <div class="form-group">
+          <label for="folder-title-font-size">Folder Name Size <span id="folder-title-font-size-display">13</span>px</label>
+          <input type="range" id="folder-title-font-size" min="8" max="32" step="1" value="13">
+        </div>
+        <div class="form-group">
+          <label for="bookmark-title-font">Bookmark Name Typeface</label>
+          <select id="bookmark-title-font"></select>
+          <div class="font-preview" id="bookmark-title-font-preview">AaBbCcDd 123</div>
+        </div>
+        <div class="form-group">
+          <label for="bookmark-title-font-size">Bookmark Name Size <span id="bookmark-title-font-size-display">10</span>px</label>
+          <input type="range" id="bookmark-title-font-size" min="6" max="24" step="1" value="10">
+        </div>
+
+        <h3 class="subsection-title">Import VS Code Theme</h3>
+        <p class="section-description">
+          Import any VS Code theme <code>.json</code> file. Find themes on GitHub — look in the
+          <code>themes/</code> folder of any VS Code theme repo. Imported themes appear in the
+          Background Theme picker above.
+        </p>
+        <div class="form-group">
+          <input type="file" id="theme-file-input" accept=".json" style="display:none">
+          <button type="button" id="import-theme-btn" class="btn btn-secondary">+ Import Theme File (.json)</button>
+          <div id="import-theme-status" class="import-theme-status hidden"></div>
+        </div>
+        <div id="imported-themes-list" class="imported-themes-list"></div>
       </div>
 
       <div class="form-section">

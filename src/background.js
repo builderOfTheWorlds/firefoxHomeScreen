@@ -7,20 +7,19 @@ browser.runtime.onInstalled.addListener((details) => {
   }
 });
 
-// URLs explicitly queued for a forced re-capture (bypasses the "skip if exists" check)
-const forceCaptureUrls = new Set();
+// Maps tabId -> original bookmark URL for forced re-captures (survives redirects)
+const forceCaptureByTab = new Map();
 
 browser.runtime.onMessage.addListener((message) => {
   if (message.type !== 'force-capture' || !message.url) return false;
-  forceCaptureUrls.add(message.url);
-  browser.tabs.create({ url: message.url, active: true }).catch(() => {
-    forceCaptureUrls.delete(message.url);
-  });
+  browser.tabs.create({ url: message.url, active: true }).then(tab => {
+    forceCaptureByTab.set(tab.id, message.url);
+  }).catch(() => {});
   return false;
 });
 
 // Capture a screenshot when the user visits a bookmarked URL
-browser.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
+browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return;
   if (!tab.active || !tab.url) return;
   if (!/^https?:\/\//.test(tab.url)) return;
@@ -33,14 +32,28 @@ browser.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
     return;
   }
 
-  if (!config || !config.folders) return;
+  if (!config) return;
+
+  // Support both legacy { folders } and current { pages } config formats
+  const allFolders = config.pages
+    ? config.pages.flatMap(p => p.folders || [])
+    : (config.folders || []);
+
+  if (allFolders.length === 0) return;
+
+  // Check if this tab was opened for a forced re-capture
+  const forcedBookmarkUrl = forceCaptureByTab.get(tabId);
+  const isForced = forcedBookmarkUrl !== undefined;
+  if (isForced) forceCaptureByTab.delete(tabId);
 
   const allUrls = new Set(
-    config.folders.flatMap(f => (f.bookmarks || []).map(b => b.url))
+    allFolders.flatMap(f => (f.bookmarks || []).map(b => b.url))
   );
-  if (!allUrls.has(tab.url)) return;
 
-  const isForced = forceCaptureUrls.has(tab.url);
+  // For forced captures, match on the original bookmark URL; otherwise match tab.url
+  if (!isForced && !allUrls.has(tab.url)) return;
+  if (isForced && !allUrls.has(forcedBookmarkUrl)) return;
+
   if (!isForced) {
     try {
       const existing = await ScreenshotDB.get(tab.url);
@@ -49,7 +62,9 @@ browser.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
       return;
     }
   }
-  forceCaptureUrls.delete(tab.url);
+
+  // Store the screenshot under the bookmark URL so the tile can find it
+  const storeUrl = isForced ? forcedBookmarkUrl : tab.url;
 
   try {
     const settingsResult = await browser.storage.sync.get('screenshotDelay');
@@ -60,10 +75,10 @@ browser.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
       format: 'jpeg',
       quality: 70,
     });
-    await ScreenshotDB.put(tab.url, dataUrl);
-    console.log('[Screenshot] captured for', tab.url);
-    browser.runtime.sendMessage({ type: 'screenshot-captured', url: tab.url }).catch(() => {});
+    await ScreenshotDB.put(storeUrl, dataUrl);
+    console.log('[Screenshot] captured for', storeUrl);
+    browser.runtime.sendMessage({ type: 'screenshot-captured', url: storeUrl }).catch(() => {});
   } catch (e) {
-    console.warn('[Screenshot] capture failed for', tab.url, e);
+    console.warn('[Screenshot] capture failed for', storeUrl, e);
   }
 });

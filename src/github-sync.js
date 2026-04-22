@@ -7,7 +7,11 @@ class GitHubSync {
     const result = await browser.storage.sync.get([
       'githubToken', 'githubRepo', 'configPath',
       'folderColumns', 'folderPadding', 'bookmarkIconSize', 'screenshotHeight', 'screenshotDelay',
-      'defaultFolderMinWidth', 'defaultFolderMinHeight', 'defaultBmWidth', 'defaultBmHeight', 'bookmarkScale'
+      'defaultFolderMinWidth', 'defaultFolderMinHeight', 'defaultBmWidth', 'defaultBmHeight', 'bookmarkScale', 'defaultFolderIcon',
+      'bgTheme', 'bgCustomColor', 'bgImageUrl',
+      'navbarColor1', 'navbarColor2', 'navbarTextColor',
+      'folderTitlebarColor1', 'folderTitlebarColor2', 'folderBgColor', 'folderTextColor', 'folderTitleColor',
+      'folderTitleFont', 'folderTitleFontSize', 'bookmarkTitleFont', 'bookmarkTitleFontSize'
     ]);
     return {
       token: result.githubToken || '',
@@ -22,7 +26,23 @@ class GitHubSync {
       defaultFolderMinHeight: result.defaultFolderMinHeight || 0,
       defaultBmWidth: result.defaultBmWidth || 80,
       defaultBmHeight: result.defaultBmHeight || 80,
-      bookmarkScale: result.bookmarkScale || 100
+      bookmarkScale: result.bookmarkScale || 100,
+      bgTheme: result.bgTheme || 'purple',
+      bgCustomColor: result.bgCustomColor || '#667eea',
+      bgImageUrl: result.bgImageUrl || '',
+      navbarColor1: result.navbarColor1 || '#3a1a6e',
+      navbarColor2: result.navbarColor2 || '#2d1157',
+      navbarTextColor: result.navbarTextColor || '#ffffff',
+      folderTitlebarColor1: result.folderTitlebarColor1 || '#667eea',
+      folderTitlebarColor2: result.folderTitlebarColor2 || '#764ba2',
+      folderBgColor: result.folderBgColor || '#ffffff',
+      folderTextColor: result.folderTextColor || '#4a5568',
+      folderTitleColor: result.folderTitleColor || '#ffffff',
+      folderTitleFont: result.folderTitleFont || '',
+      folderTitleFontSize: result.folderTitleFontSize || 13,
+      bookmarkTitleFont: result.bookmarkTitleFont || '',
+      bookmarkTitleFontSize: result.bookmarkTitleFontSize || 10,
+      defaultFolderIcon: result.defaultFolderIcon !== undefined ? result.defaultFolderIcon : '📁',
     };
   }
 
@@ -41,8 +61,35 @@ class GitHubSync {
       defaultFolderMinHeight: settings.defaultFolderMinHeight,
       defaultBmWidth: settings.defaultBmWidth,
       defaultBmHeight: settings.defaultBmHeight,
-      bookmarkScale: settings.bookmarkScale
+      bookmarkScale: settings.bookmarkScale,
+      bgTheme: settings.bgTheme,
+      bgCustomColor: settings.bgCustomColor,
+      bgImageUrl: settings.bgImageUrl,
+      navbarColor1: settings.navbarColor1,
+      navbarColor2: settings.navbarColor2,
+      navbarTextColor: settings.navbarTextColor,
+      folderTitlebarColor1: settings.folderTitlebarColor1,
+      folderTitlebarColor2: settings.folderTitlebarColor2,
+      folderBgColor: settings.folderBgColor,
+      folderTextColor: settings.folderTextColor,
+      folderTitleColor: settings.folderTitleColor,
+      folderTitleFont: settings.folderTitleFont,
+      folderTitleFontSize: settings.folderTitleFontSize,
+      bookmarkTitleFont: settings.bookmarkTitleFont,
+      bookmarkTitleFontSize: settings.bookmarkTitleFontSize,
+      defaultFolderIcon: settings.defaultFolderIcon,
     });
+  }
+
+  // Load imported VSCode themes from local storage
+  async loadImportedThemes() {
+    const result = await browser.storage.local.get('importedThemes');
+    return result.importedThemes || [];
+  }
+
+  // Save imported VSCode themes to local storage
+  async saveImportedThemes(themes) {
+    await browser.storage.local.set({ importedThemes: themes });
   }
 
   // Fetch bookmarks configuration from GitHub
@@ -75,7 +122,7 @@ class GitHubSync {
     }
 
     const data = await response.json();
-    return JSON.parse(atob(data.content));
+    return JSON.parse(decodeURIComponent(escape(atob(data.content))));
   }
 
   // Push bookmarks configuration to GitHub
@@ -109,7 +156,7 @@ class GitHubSync {
     }
 
     const content = JSON.stringify(newConfig, null, 2);
-    const encodedContent = btoa(content);
+    const encodedContent = btoa(unescape(encodeURIComponent(content)));
 
     const updateResponse = await fetch(fileUrl, {
       method: 'PUT',

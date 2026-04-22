@@ -5,8 +5,12 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$srcDir   = Join-Path $repoRoot "src"
+$distDir  = Join-Path $repoRoot "dist"
+
 # --- Load .env ---------------------------------------------------------------
-$envFile = Join-Path $PSScriptRoot ".env"
+$envFile = Join-Path $repoRoot ".env"
 if (-not (Test-Path $envFile)) {
     Write-Error ".env file not found. Copy .env.example to .env and fill in your AMO credentials."
 }
@@ -25,7 +29,7 @@ if (-not $apiKey -or -not $apiSecret) {
 }
 
 # --- Bump patch version -------------------------------------------------------
-$manifestPath = Join-Path $PSScriptRoot "manifest.json"
+$manifestPath = Join-Path $srcDir "manifest.json"
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 
 $parts = $manifest.version -split '\.'
@@ -37,12 +41,14 @@ $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath -Encoding UTF8
 Write-Host "Version bumped to $newVersion"
 
 # --- Sign ---------------------------------------------------------------------
-$artifactsDir = Join-Path $PSScriptRoot "web-ext-artifacts"
+$geckoId = $manifest.browser_specific_settings.gecko.id
+$amoStatusUrl = "https://addons.mozilla.org/developers/addon/$geckoId/versions/"
 Write-Host "Signing extension..."
-web-ext sign --source-dir $PSScriptRoot --api-key $apiKey --api-secret $apiSecret --artifacts-dir $artifactsDir --channel unlisted --timeout 300000
+Write-Host "  Check approval status at: $amoStatusUrl"
+web-ext sign --source-dir $srcDir --api-key $apiKey --api-secret $apiSecret --artifacts-dir $distDir --channel unlisted --timeout 300000
 
 # --- Open output folder -------------------------------------------------------
 Write-Host ""
-Write-Host "Done! Install the .xpi from: $artifactsDir"
+Write-Host "Done! Install the .xpi from: $distDir"
 Write-Host "  Firefox -> about:addons -> gear icon -> Install Add-on From File"
-if (Test-Path $artifactsDir) { Invoke-Item $artifactsDir }
+if (Test-Path $distDir) { Invoke-Item $distDir }

@@ -1,4 +1,5 @@
 .idea/
 .env
-web-ext-artifacts/
 .venv/
+dist/
+web-ext-artifacts/
