@@ -71,13 +71,41 @@ async function getConfig() {
   return fetched;
 }
 
+// ─── Dirty page tracking ─────────────────────────────────────────────────────
+// dirtyPages: Set of page IDs whose page-{id}.json files need pushing.
+// An empty set with pendingSync='1' means only the index changed.
+
+function getDirtyPageIds() {
+  try { return new Set(JSON.parse(localStorage.getItem('dirtyPages') || '[]')); }
+  catch { return new Set(); }
+}
+
+function markDirtyPages(...ids) {
+  const dirty = getDirtyPageIds();
+  for (const id of ids) dirty.add(id);
+  localStorage.setItem('dirtyPages', JSON.stringify([...dirty]));
+  localStorage.setItem('pendingSync', '1');
+}
+
+function clearDirtyState() {
+  localStorage.removeItem('dirtyPages');
+  localStorage.removeItem('pendingSync');
+}
+
 // Apply a config mutation locally: write to BookmarkDB, update cache, re-render.
-// GitHub sync happens on the 60s interval or manual button — not here.
-async function applyLocalChange(config) {
+// changedPageIds: string | string[] | Set<string> — page files that changed.
+//   Pass nothing / null for index-only changes (page add/delete/rename/reorder).
+// GitHub sync happens on the periodic interval or manual button — not here.
+async function applyLocalChange(config, changedPageIds) {
   ensurePages(config);
   currentConfig = config;
   await BookmarkDB.put(config);
   browser.storage.local.set({ cachedBookmarks: config }).catch(() => {});
+  localStorage.setItem('pendingSync', '1');
+  if (changedPageIds) {
+    const ids = typeof changedPageIds === 'string' ? [changedPageIds] : [...changedPageIds];
+    markDirtyPages(...ids);
+  }
   await renderBookmarks(config);
 }
 
@@ -92,9 +120,20 @@ async function syncToGitHub() {
   pendingIndicator.textContent = 'Syncing…';
 
   try {
-    await githubSync.updateConfig(config);
+    const dirtyPageIds = getDirtyPageIds();
+    // Pass the dirty set (may be empty for index-only changes, or null = write all as fallback).
+    const pagesToSync = dirtyPageIds.size > 0 ? dirtyPageIds : null;
+    const { sha } = await githubSync.updateConfig(config, pagesToSync);
+    clearDirtyState();
+    if (sha) localStorage.setItem('lastPushedSha', sha);
     showStatus('Saved to GitHub!', 'success');
     console.log('[Sync] pushed to GitHub successfully');
+
+    // Sync screenshots in the background — failures are non-fatal
+    const urls = getAllBookmarkUrls(config);
+    if (urls.length > 0) {
+      githubSync.syncScreenshots(urls).catch(e => console.warn('[Sync] screenshot sync failed', e));
+    }
   } catch (error) {
     console.error('[Sync] push failed', error);
     showStatus(`Sync failed: ${error.message}`, 'error');
@@ -167,11 +206,14 @@ async function moveBookmark(srcFolderIdx, srcBmIdx, dstFolderIdx, dstBmIdx, inse
     insertIdx = Math.max(0, Math.min(insertIdx, dstFolder.bookmarks.length));
     ddLog('inserting at index', insertIdx);
     dstFolder.bookmarks.splice(insertIdx, 0, bm);
+    const now = Date.now();
+    srcFolder.lastModified = now;
+    dstFolder.lastModified = now;
     ddLog('config after', {
       srcBookmarks: srcFolder.bookmarks.map(b => b.title),
       dstBookmarks: dstFolder.bookmarks.map(b => b.title),
     });
-    await applyLocalChange(config);
+    await applyLocalChange(config, currentPageId);
     ddLog('local change applied');
   } catch (error) {
     console.error('[DnD] moveBookmark error', error);
@@ -200,11 +242,14 @@ async function moveBookmarkToFolder(srcFolderIdx, srcBmIdx, dstFolderIdx) {
     ddLog('spliced bookmark', bm);
     dstFolder.bookmarks = dstFolder.bookmarks || [];
     dstFolder.bookmarks.push(bm);
+    const now = Date.now();
+    srcFolder.lastModified = now;
+    dstFolder.lastModified = now;
     ddLog('config after', {
       srcBookmarks: srcFolder.bookmarks.map(b => b.title),
       dstBookmarks: dstFolder.bookmarks.map(b => b.title),
     });
-    await applyLocalChange(config);
+    await applyLocalChange(config, currentPageId);
     ddLog('local change applied');
   } catch (error) {
     console.error('[DnD] moveBookmarkToFolder error', error);
@@ -228,8 +273,9 @@ async function reorderFolder(srcIdx, dstIdx, insertBefore) {
     insertIdx = Math.max(0, Math.min(insertIdx, folders.length));
     ddLog('inserting at index', insertIdx);
     folders.splice(insertIdx, 0, folder);
+    folder.lastModified = Date.now();
     ddLog('folders after', folders.map(f => f.name));
-    await applyLocalChange(config);
+    await applyLocalChange(config, currentPageId);
     ddLog('local change applied');
   } catch (error) {
     console.error('[DnD] reorderFolder error', error);
@@ -267,8 +313,12 @@ async function moveFolderToPage(folderName, targetPageId) {
     if (!dstPage) return;
     const [folder] = srcPage.folders.splice(folderIdx, 1);
     dstPage.folders = dstPage.folders || [];
+    folder.lastModified = Date.now();
     dstPage.folders.push(folder);
-    await applyLocalChange(config);
+    // Add a tombstone on the source page so other machines remove the folder there.
+    srcPage.folderTombstones = srcPage.folderTombstones || [];
+    srcPage.folderTombstones.push({ name: folder.name, deletedAt: Date.now() });
+    await applyLocalChange(config, [currentPageId, targetPageId]);
     showStatus(`Folder moved to "${dstPage.name}"`, 'success');
   } catch (err) {
     showStatus(`Error: ${err.message}`, 'error');
@@ -347,7 +397,8 @@ ctxShrinkToFit.addEventListener('click', async () => {
 
       cfgFolder.rw = newW;
       cfgFolder.rh = newH;
-      await applyLocalChange(config);
+      cfgFolder.lastModified = Date.now();
+      await applyLocalChange(config, currentPageId);
 
       folderDiv.style.width = `${newW}px`;
       folderDiv.style.height = `${newH}px`;
@@ -355,7 +406,8 @@ ctxShrinkToFit.addEventListener('click', async () => {
     } else {
       delete cfgFolder.rw;
       delete cfgFolder.rh;
-      await applyLocalChange(config);
+      cfgFolder.lastModified = Date.now();
+      await applyLocalChange(config, currentPageId);
       folderDiv.style.removeProperty('width');
       folderDiv.style.removeProperty('height');
       folderDiv.classList.remove('has-explicit-size');
@@ -382,12 +434,18 @@ ctxRemove.addEventListener('click', async () => {
     const activePage = getActivePage(config);
     const folder = activePage.folders.find(f => f.name === folderName);
     if (folder) {
+      const now = Date.now();
+      folder.bookmarkTombstones = folder.bookmarkTombstones || [];
+      folder.bookmarkTombstones.push({ url: bookmarkUrl, deletedAt: now });
       folder.bookmarks = folder.bookmarks.filter(b => b.url !== bookmarkUrl);
+      folder.lastModified = now;
       if (folder.bookmarks.length === 0) {
+        activePage.folderTombstones = activePage.folderTombstones || [];
+        activePage.folderTombstones.push({ name: folderName, deletedAt: now });
         activePage.folders = activePage.folders.filter(f => f.name !== folderName);
       }
     }
-    await applyLocalChange(config);
+    await applyLocalChange(config, currentPageId);
     showStatus('Bookmark removed!', 'success');
   } catch (error) {
     showStatus(`Error: ${error.message}`, 'error');
@@ -471,7 +529,7 @@ function renderPageTabs(config) {
         const cfg = await getConfig();
         cfg.pages = cfg.pages.filter(p => p.id !== page.id);
         if (currentPageId === page.id) setActivePage(cfg.pages[0].id);
-        await applyLocalChange(cfg);
+        await applyLocalChange(cfg, null); // index-only change
       });
       tab.appendChild(closeBtn);
     }
@@ -492,7 +550,7 @@ function renderPageTabs(config) {
       const p = cfg.pages.find(pg => pg.id === page.id);
       if (p) {
         p.name = newName.trim();
-        await applyLocalChange(cfg);
+        await applyLocalChange(cfg, null); // index-only change
       }
     });
 
@@ -540,7 +598,7 @@ function renderPageTabs(config) {
       insertIdx = Math.max(0, Math.min(insertIdx, cfg.pages.length));
       cfg.pages.splice(insertIdx, 0, moved);
       tabDragFromIndex = null;
-      await applyLocalChange(cfg);
+      await applyLocalChange(cfg, null); // index-only change
     });
 
     pageTabs.appendChild(tab);
@@ -555,9 +613,9 @@ function renderPageTabs(config) {
     const name = prompt('New page name:', 'Page ' + (cfg.pages.length + 1));
     if (!name || !name.trim()) return;
     const id = 'page-' + Date.now();
-    cfg.pages.push({ id, name: name.trim(), folders: [] });
+    cfg.pages.push({ id, name: name.trim(), folders: [], lastModified: Date.now(), folderTombstones: [] });
     setActivePage(id);
-    await applyLocalChange(cfg);
+    await applyLocalChange(cfg, id); // new page file + index
   });
   pageTabs.appendChild(addPageBtn);
 }
@@ -640,7 +698,8 @@ async function renderBookmarks(config) {
       const cfgFolder = activePage.folders.find(f => f.name === folder.name);
       if (cfgFolder) {
         cfgFolder.collapsed = !cfgFolder.collapsed;
-        await applyLocalChange(config);
+        cfgFolder.lastModified = Date.now();
+        await applyLocalChange(config, currentPageId);
       }
     });
 
@@ -866,6 +925,130 @@ async function renderBookmarks(config) {
   });
 }
 
+// Extract all bookmark URLs from a config (used for screenshot sync)
+function getAllBookmarkUrls(config) {
+  if (!config || !config.pages) return [];
+  return config.pages.flatMap(p => (p.folders || []).flatMap(f => (f.bookmarks || []).map(b => b.url)));
+}
+
+// Apply appearance CSS vars from a settings object (extracted so it can be
+// called after remote settings are applied mid-load).
+function applyStyleSettings(s) {
+  const root = document.documentElement.style;
+  const scale = (s.bookmarkScale || 100) / 100;
+  root.setProperty('--screenshot-height', `${Math.round((s.screenshotHeight || 100) * scale)}px`);
+  root.setProperty('--folder-padding', `${s.folderPadding}px`);
+  root.setProperty('--bookmark-icon-size', `${Math.round((s.bookmarkIconSize || 28) * scale)}px`);
+  if (s.defaultFolderMinWidth) root.setProperty('--default-folder-min-width', `${s.defaultFolderMinWidth}px`);
+  if (s.defaultFolderMinHeight) root.setProperty('--default-folder-min-height', `${s.defaultFolderMinHeight}px`);
+  root.setProperty('--default-bm-width', `${Math.round((s.defaultBmWidth || 80) * scale)}px`);
+  root.setProperty('--default-bm-height', `${Math.round((s.defaultBmHeight || 80) * scale)}px`);
+  if (s.folderTitleFont) root.setProperty('--folder-title-font-family', s.folderTitleFont);
+  root.setProperty('--folder-title-font-size', `${s.folderTitleFontSize || 13}px`);
+  if (s.bookmarkTitleFont) root.setProperty('--bookmark-title-font-family', s.bookmarkTitleFont);
+  root.setProperty('--bookmark-title-font-size', `${s.bookmarkTitleFontSize || 10}px`);
+  const bgTheme = s.bgTheme || 'purple';
+  if (!bgTheme.startsWith('imported:')) {
+    applyBackground(s);
+    root.setProperty('--navbar-color1', s.navbarColor1 || '#3a1a6e');
+    root.setProperty('--navbar-color2', s.navbarColor2 || '#2d1157');
+    root.setProperty('--navbar-text-color', s.navbarTextColor || '#ffffff');
+    root.setProperty('--folder-titlebar-color1', s.folderTitlebarColor1 || '#667eea');
+    root.setProperty('--folder-titlebar-color2', s.folderTitlebarColor2 || '#764ba2');
+    root.setProperty('--folder-bg', s.folderBgColor || '#ffffff');
+    root.setProperty('--folder-text-color', s.folderTextColor || '#4a5568');
+    root.setProperty('--folder-text-hover-color', s.folderTitlebarColor1 || '#667eea');
+    root.setProperty('--folder-title-color', s.folderTitleColor || '#ffffff');
+  }
+}
+
+// Pull config from GitHub, merge with local state, and re-render if anything changed.
+// For v2 configs, dirty pages (local unpushed changes) are preserved during merge.
+// For v1 configs, local changes are preserved if pendingSync is set.
+async function refreshFromGitHub() {
+  try {
+    const remote = await githubSync.fetchConfig();
+    if (!remote) return;
+
+    const isV2 = remote._schemaVersion === 2 && !remote._migratingFromV1;
+    const remoteSha = remote._remoteSha;
+    delete remote._remoteSha;
+    delete remote._schemaVersion;
+    delete remote._migratingFromV1;
+
+    if (!isV2) {
+      // v1: protect local uncommitted changes from being overwritten.
+      if (localStorage.getItem('pendingSync')) return;
+
+      const lastPushedSha = localStorage.getItem('lastPushedSha');
+      if (remoteSha && lastPushedSha && remoteSha === lastPushedSha) {
+        console.log('[Sync] background refresh: remote SHA matches last push, skipping');
+        return;
+      }
+      if (remoteSha) localStorage.setItem('lastPushedSha', remoteSha);
+
+      ensurePages(remote);
+      if (currentConfig && JSON.stringify(remote.pages) === JSON.stringify(currentConfig.pages)) return;
+      currentConfig = remote;
+      await BookmarkDB.put(remote);
+      browser.storage.local.set({ cachedBookmarks: remote }).catch(() => {});
+      if (remote.appSettings) {
+        await githubSync.applyRemoteSettings(remote.appSettings).catch(() => {});
+        const merged = await githubSync.loadSettings();
+        currentDefaultFolderIcon = merged.defaultFolderIcon !== undefined ? merged.defaultFolderIcon : '📁';
+        applyStyleSettings(merged);
+      }
+      await renderBookmarks(remote);
+      const urls = getAllBookmarkUrls(remote);
+      if (urls.length > 0) githubSync.syncScreenshots(urls).catch(() => {});
+      console.log('[Sync] background refresh applied v1 config from GitHub');
+      return;
+    }
+
+    // v2: per-page merge. Dirty pages keep their local version; clean pages are merged.
+    const dirtyPageIds = getDirtyPageIds();
+    const localPageMap = new Map((currentConfig?.pages || []).map(p => [p.id, p]));
+    const remotePageMap = new Map(remote.pages.map(p => [p.id, p]));
+
+    const mergedPages = [];
+    for (const [id, remotePage] of remotePageMap) {
+      if (dirtyPageIds.has(id)) {
+        // Keep local version — it has unpushed edits.
+        mergedPages.push(localPageMap.get(id) || remotePage);
+      } else {
+        const localPage = localPageMap.get(id);
+        mergedPages.push(localPage ? githubSync.mergePageConfig(localPage, remotePage) : remotePage);
+      }
+    }
+    // Append pages that only exist locally (new pages not yet pushed).
+    for (const [id, localPage] of localPageMap) {
+      if (!remotePageMap.has(id)) mergedPages.push(localPage);
+    }
+
+    // Strip internal _sha fields for comparison to avoid false positives.
+    const strip = pages => JSON.stringify(pages.map(({ _sha, ...rest }) => rest));
+    if (currentConfig && strip(mergedPages) === strip(currentConfig.pages)) return;
+
+    const mergedConfig = { ...remote, pages: mergedPages };
+    currentConfig = mergedConfig;
+    await BookmarkDB.put(mergedConfig);
+    browser.storage.local.set({ cachedBookmarks: mergedConfig }).catch(() => {});
+
+    if (remote.appSettings) {
+      await githubSync.applyRemoteSettings(remote.appSettings).catch(() => {});
+      const settings = await githubSync.loadSettings();
+      currentDefaultFolderIcon = settings.defaultFolderIcon !== undefined ? settings.defaultFolderIcon : '📁';
+      applyStyleSettings(settings);
+    }
+    await renderBookmarks(mergedConfig);
+    const urls = getAllBookmarkUrls(mergedConfig);
+    if (urls.length > 0) githubSync.syncScreenshots(urls).catch(() => {});
+    console.log('[Sync] background refresh: merged v2 config from GitHub');
+  } catch (e) {
+    console.warn('[Sync] background refresh failed', e);
+  }
+}
+
 // Load and display bookmarks
 async function loadBookmarks() {
   try {
@@ -877,6 +1060,27 @@ async function loadBookmarks() {
       config = await githubSync.fetchConfig();
       await BookmarkDB.put(config);
       browser.storage.local.set({ cachedBookmarks: config }).catch(() => {});
+
+      // Apply appearance settings embedded by the source machine, then download
+      // any screenshots that were synced to GitHub but aren't local yet.
+      if (config.appSettings) {
+        await githubSync.applyRemoteSettings(config.appSettings).catch(() => {});
+        const merged = await githubSync.loadSettings();
+        currentDefaultFolderIcon = merged.defaultFolderIcon !== undefined ? merged.defaultFolderIcon : '📁';
+        applyStyleSettings(merged);
+      }
+      const urls = getAllBookmarkUrls(config);
+      if (urls.length > 0) {
+        githubSync.syncScreenshots(urls).catch(e => console.warn('[Sync] screenshot download failed', e));
+      }
+    } else {
+      // Local cache exists — render immediately, then merge from GitHub in the background.
+      // refreshFromGitHub handles dirty-page protection internally (v2) or pendingSync (v1).
+      ensurePages(config);
+      currentConfig = config;
+      await renderBookmarks(config);
+      refreshFromGitHub();
+      return;
     }
 
     ensurePages(config);
@@ -1080,6 +1284,7 @@ async function saveEdit() {
         const fh = parseInt(editFolderMinHeightInput.value, 10);
         folder.minHeight = fh > 0 ? fh : undefined;
         folder.icon = editFolderIconValue;
+        folder.lastModified = Date.now();
       }
     } else {
       const newTitle = editBmTitleInput.value.trim();
@@ -1096,10 +1301,12 @@ async function saveEdit() {
         bookmark.width = bw > 0 ? bw : undefined;
         const bh = parseInt(editBmHeightInput.value, 10);
         bookmark.height = bh > 0 ? bh : undefined;
+        bookmark.lastModified = Date.now();
+        if (folder) folder.lastModified = Date.now();
       }
     }
 
-    await applyLocalChange(config);
+    await applyLocalChange(config, currentPageId);
     closeEditModal();
     showStatus('Saved!', 'success');
   } catch (error) {
@@ -1135,19 +1342,21 @@ async function saveNewBookmark() {
     const config = await getConfig() || { pages: [{ id: 'page-1', name: 'Bookmarks', folders: [] }] };
     ensurePages(config);
     const activePage = getActivePage(config);
-    const bookmark = { title, url };
+    const now = Date.now();
+    const bookmark = { title, url, lastModified: now };
 
     if (folderVal === '__new__') {
-      activePage.folders.push({ name: newFolderName, bookmarks: [bookmark] });
+      activePage.folders.push({ name: newFolderName, bookmarks: [bookmark], lastModified: now, bookmarkTombstones: [] });
     } else {
       const folder = activePage.folders.find(f => f.name === folderVal);
       if (folder) {
         folder.bookmarks = folder.bookmarks || [];
         folder.bookmarks.push(bookmark);
+        folder.lastModified = now;
       }
     }
 
-    await applyLocalChange(config);
+    await applyLocalChange(config, currentPageId);
     closeAddModal();
     showStatus('Bookmark added!', 'success');
   } catch (error) {
@@ -1184,10 +1393,12 @@ settingsLink.addEventListener('click', (e) => {
 document.getElementById('reset-positions-btn').addEventListener('click', async () => {
   const config = await getConfig();
   const activePage = getActivePage(config);
+  const now = Date.now();
   activePage.folders.forEach(f => {
     delete f.x; delete f.y; delete f.rw; delete f.rh;
+    f.lastModified = now;
   });
-  await applyLocalChange(config);
+  await applyLocalChange(config, currentPageId);
   showStatus('Folder positions reset!', 'success');
 });
 
@@ -1221,7 +1432,7 @@ document.addEventListener('mouseup', async (e) => {
       const config = await getConfig();
       const activePage = getActivePage(config);
       const cfgFolder = activePage.folders.find(f => f.name === folderName);
-      if (cfgFolder) { cfgFolder.x = newX; cfgFolder.y = newY; await applyLocalChange(config); }
+      if (cfgFolder) { cfgFolder.x = newX; cfgFolder.y = newY; cfgFolder.lastModified = Date.now(); await applyLocalChange(config, currentPageId); }
     } catch (err) { console.error('[FolderMove] failed to save position', err); }
   }
 
@@ -1235,7 +1446,7 @@ document.addEventListener('mouseup', async (e) => {
       const config = await getConfig();
       const activePage = getActivePage(config);
       const cfgFolder = activePage.folders.find(f => f.name === folderName);
-      if (cfgFolder) { cfgFolder.rw = newW; cfgFolder.rh = newH; await applyLocalChange(config); }
+      if (cfgFolder) { cfgFolder.rw = newW; cfgFolder.rh = newH; cfgFolder.lastModified = Date.now(); await applyLocalChange(config, currentPageId); }
     } catch (err) { console.error('[FolderResize] failed to save size', err); }
   }
 });
@@ -1278,42 +1489,20 @@ async function applyImportedTheme(themeId, root) {
 // Load bookmarks on page load
 async function initialize() {
   const settings = await githubSync.loadSettings();
-  const root = document.documentElement.style;
-  const scale = (settings.bookmarkScale || 100) / 100;
-  root.setProperty('--screenshot-height', `${Math.round((settings.screenshotHeight || 100) * scale)}px`);
-  root.setProperty('--folder-padding', `${settings.folderPadding}px`);
-  root.setProperty('--bookmark-icon-size', `${Math.round((settings.bookmarkIconSize || 28) * scale)}px`);
-  if (settings.defaultFolderMinWidth) root.setProperty('--default-folder-min-width', `${settings.defaultFolderMinWidth}px`);
-  if (settings.defaultFolderMinHeight) root.setProperty('--default-folder-min-height', `${settings.defaultFolderMinHeight}px`);
   currentDefaultFolderIcon = settings.defaultFolderIcon !== undefined ? settings.defaultFolderIcon : '📁';
-  root.setProperty('--default-bm-width', `${Math.round((settings.defaultBmWidth || 80) * scale)}px`);
-  root.setProperty('--default-bm-height', `${Math.round((settings.defaultBmHeight || 80) * scale)}px`);
-  if (settings.folderTitleFont) root.setProperty('--folder-title-font-family', settings.folderTitleFont);
-  root.setProperty('--folder-title-font-size', `${settings.folderTitleFontSize || 13}px`);
-  if (settings.bookmarkTitleFont) root.setProperty('--bookmark-title-font-family', settings.bookmarkTitleFont);
-  root.setProperty('--bookmark-title-font-size', `${settings.bookmarkTitleFontSize || 10}px`);
 
-  // Apply appearance theme
   const bgTheme = settings.bgTheme || 'purple';
   if (bgTheme.startsWith('imported:')) {
-    await applyImportedTheme(bgTheme.slice('imported:'.length), root);
-  } else {
-    applyBackground(settings);
-    root.setProperty('--navbar-color1', settings.navbarColor1 || '#3a1a6e');
-    root.setProperty('--navbar-color2', settings.navbarColor2 || '#2d1157');
-    root.setProperty('--navbar-text-color', settings.navbarTextColor || '#ffffff');
-    root.setProperty('--folder-titlebar-color1', settings.folderTitlebarColor1 || '#667eea');
-    root.setProperty('--folder-titlebar-color2', settings.folderTitlebarColor2 || '#764ba2');
-    root.setProperty('--folder-bg', settings.folderBgColor || '#ffffff');
-    root.setProperty('--folder-text-color', settings.folderTextColor || '#4a5568');
-    root.setProperty('--folder-text-hover-color', settings.folderTitlebarColor1 || '#667eea');
-    root.setProperty('--folder-title-color', settings.folderTitleColor || '#ffffff');
+    await applyImportedTheme(bgTheme.slice('imported:'.length), document.documentElement.style);
   }
+  applyStyleSettings(settings);
 
   await loadBookmarks();
 
-  // Auto-sync to GitHub every 60 seconds
-  setInterval(() => syncToGitHub().catch(e => console.warn('[AutoSync] failed', e)), 60_000);
+  // Push local changes to GitHub every hour.
+  setInterval(() => syncToGitHub().catch(e => console.warn('[AutoSync] failed', e)), 3_600_000);
+  // Pull remote changes every 60 seconds so edits from other machines appear promptly.
+  setInterval(() => refreshFromGitHub().catch(e => console.warn('[AutoRefresh] failed', e)), 60_000);
 }
 
 initialize();

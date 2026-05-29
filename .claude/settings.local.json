@@ -22,7 +22,8 @@
       "Bash(git mv *)",
       "Bash(mv /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/extension-amo-*.zip /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/dist/)",
       "Bash(mv /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/web-ext-artifacts/*.xpi /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/dist/)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(xargs grep *)"
     ],
     "deny": [],
     "ask": []

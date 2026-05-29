@@ -564,9 +564,11 @@ async function testConnection() {
     // Try to fetch config
     const config = await githubSync.fetchConfig();
 
-    if (config && config.folders) {
+    if (config && (config.pages || config.folders)) {
+      const pages = config.pages || [{ folders: config.folders || [] }];
+      const totalFolders = pages.reduce((sum, p) => sum + (p.folders || []).length, 0);
       showStatus(
-        `Connection successful! Found ${config.folders.length} folder(s) with bookmarks.`,
+        `Connection successful! Found ${pages.length} page(s) with ${totalFolders} folder(s).`,
         'success'
       );
     } else {
