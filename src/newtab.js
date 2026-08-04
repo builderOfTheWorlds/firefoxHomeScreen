@@ -21,10 +21,13 @@ const statusMessage = document.getElementById('status-message');
 const syncBtn = document.getElementById('sync-btn');
 const pendingIndicator = document.getElementById('pending-indicator');
 const addBtn = document.getElementById('add-btn');
+const addTodoBtn = document.getElementById('add-todo-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsLink = document.getElementById('settings-link');
 const contextMenu = document.getElementById('context-menu');
 const ctxRemove = document.getElementById('ctx-remove');
+const ctxRemoveItem = document.getElementById('ctx-remove-item');
+const ctxDeleteList = document.getElementById('ctx-delete-list');
 const ctxAddLink = document.getElementById('ctx-add-link');
 const ctxEdit = document.getElementById('ctx-edit');
 const ctxShrinkToFit = document.getElementById('ctx-shrink-to-fit');
@@ -35,7 +38,7 @@ const ctxPageSubmenuList = document.getElementById('ctx-page-submenu-list');
 const pageTabs = document.getElementById('page-tabs');
 
 // Context menu state
-let ctxTarget = null; // { folderName, bookmarkUrl?, type: 'bookmark'|'folder' }
+let ctxTarget = null; // { folderName, bookmarkUrl?, itemId?, folderDiv?, type: 'bookmark'|'folder'|'todo'|'todo-item' }
 
 // Migrate legacy { folders: [...] } config to { pages: [...] } format
 function ensurePages(config) {
@@ -288,12 +291,15 @@ function showContextMenu(x, y, target) {
   ctxTarget = target;
   contextMenu.style.left = `${x}px`;
   contextMenu.style.top = `${y}px`;
+  const isFolderLike = target.type === 'folder' || target.type === 'todo';
   ctxAddLink.classList.toggle('hidden', target.type !== 'folder');
-  ctxShrinkToFit.classList.toggle('hidden', target.type !== 'folder');
-  ctxMovePage.classList.toggle('hidden', target.type !== 'folder');
+  ctxShrinkToFit.classList.toggle('hidden', !isFolderLike);
+  ctxMovePage.classList.toggle('hidden', !isFolderLike);
   ctxRemove.classList.toggle('hidden', target.type !== 'bookmark');
   ctxRefreshScreenshot.classList.toggle('hidden', target.type !== 'bookmark');
-  ctxEdit.classList.remove('hidden');
+  ctxRemoveItem.classList.toggle('hidden', target.type !== 'todo-item');
+  ctxDeleteList.classList.toggle('hidden', target.type !== 'todo');
+  ctxEdit.classList.toggle('hidden', target.type === 'todo-item');
   contextMenu.classList.remove('hidden');
 }
 
@@ -326,7 +332,7 @@ async function moveFolderToPage(folderName, targetPageId) {
 }
 
 ctxMovePage.addEventListener('mouseenter', () => {
-  if (!ctxTarget || ctxTarget.type !== 'folder' || !currentConfig) return;
+  if (!ctxTarget || (ctxTarget.type !== 'folder' && ctxTarget.type !== 'todo') || !currentConfig) return;
   ctxPageSubmenuList.innerHTML = '';
   currentConfig.pages.forEach(page => {
     const li = document.createElement('li');
@@ -376,7 +382,7 @@ ctxShrinkToFit.addEventListener('click', async () => {
     if (!cfgFolder || !folderDiv) return;
 
     const folderBody = folderDiv.querySelector('.folder-body');
-    const items = folderDiv.querySelectorAll('.bookmark');
+    const items = folderDiv.querySelectorAll('.bookmark, .todo-item');
 
     if (items.length > 0 && folderBody) {
       const folderRect = folderDiv.getBoundingClientRect();
@@ -452,6 +458,49 @@ ctxRemove.addEventListener('click', async () => {
   }
 });
 
+ctxRemoveItem.addEventListener('click', async () => {
+  if (!ctxTarget) return;
+  const { folderName, itemId } = ctxTarget;
+  hideContextMenu();
+
+  try {
+    const config = await getConfig();
+    const activePage = getActivePage(config);
+    const folder = activePage.folders.find(f => f.name === folderName);
+    if (folder) {
+      const now = Date.now();
+      folder.itemTombstones = folder.itemTombstones || [];
+      folder.itemTombstones.push({ id: itemId, deletedAt: now });
+      folder.items = (folder.items || []).filter(i => i.id !== itemId);
+      folder.lastModified = now;
+    }
+    await applyLocalChange(config, currentPageId);
+    showStatus('Item removed!', 'success');
+  } catch (error) {
+    showStatus(`Error: ${error.message}`, 'error');
+  }
+});
+
+ctxDeleteList.addEventListener('click', async () => {
+  if (!ctxTarget) return;
+  const { folderName } = ctxTarget;
+  hideContextMenu();
+  if (!confirm(`Delete todo list "${folderName}"? This cannot be undone.`)) return;
+
+  try {
+    const config = await getConfig();
+    const activePage = getActivePage(config);
+    const now = Date.now();
+    activePage.folderTombstones = activePage.folderTombstones || [];
+    activePage.folderTombstones.push({ name: folderName, deletedAt: now });
+    activePage.folders = activePage.folders.filter(f => f.name !== folderName);
+    await applyLocalChange(config, currentPageId);
+    showStatus('List deleted!', 'success');
+  } catch (error) {
+    showStatus(`Error: ${error.message}`, 'error');
+  }
+});
+
 ctxEdit.addEventListener('click', () => {
   if (!ctxTarget) return;
   const target = ctxTarget;
@@ -501,6 +550,11 @@ function getFaviconUrl(url) {
 const FOLDER_DEFAULT_COLS = 3;
 const FOLDER_DEFAULT_COL_W = 380;
 const FOLDER_DEFAULT_ROW_H = 300;
+
+function generateItemId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 // Render page tabs and the "+" add-page button
 function renderPageTabs(config) {
@@ -733,11 +787,11 @@ async function renderBookmarks(config) {
 
     titlebar.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      showContextMenu(e.clientX, e.clientY, { type: 'folder', folderName: folder.name, folderDiv });
+      showContextMenu(e.clientX, e.clientY, { type: folder.type === 'todo' ? 'todo' : 'folder', folderName: folder.name, folderDiv });
     });
 
     titlebar.addEventListener('dragover', (e) => {
-      if (!dragState || dragState.type !== 'bookmark' || dragState.folderIndex === fi) return;
+      if (!dragState || dragState.type !== 'bookmark' || dragState.folderIndex === fi || folder.type === 'todo') return;
       e.preventDefault();
       e.stopPropagation();
       titlebar.classList.add('drag-over');
@@ -750,8 +804,8 @@ async function renderBookmarks(config) {
     titlebar.addEventListener('drop', (e) => {
       ddLog('titlebar drop', { dstFi: fi, folderName: folder.name, dragState });
       titlebar.classList.remove('drag-over');
-      if (!dragState || dragState.type !== 'bookmark' || dragState.folderIndex === fi) {
-        ddLog('titlebar drop IGNORED', { reason: !dragState ? 'no dragState' : dragState.type !== 'bookmark' ? `wrong type: ${dragState.type}` : 'same folder' });
+      if (!dragState || dragState.type !== 'bookmark' || dragState.folderIndex === fi || folder.type === 'todo') {
+        ddLog('titlebar drop IGNORED', { reason: !dragState ? 'no dragState' : dragState.type !== 'bookmark' ? `wrong type: ${dragState.type}` : 'same folder or todo target' });
         return;
       }
       e.preventDefault();
@@ -766,6 +820,81 @@ async function renderBookmarks(config) {
     const folderBody = document.createElement('div');
     folderBody.className = 'folder-body';
 
+    if (folder.type === 'todo') {
+      // --- Todo list ---
+      const todoList = document.createElement('ul');
+      todoList.className = 'todo-list';
+
+      (folder.items || []).forEach((item) => {
+        const itemLi = document.createElement('li');
+        itemLi.className = 'todo-item' + (item.done ? ' done' : '');
+        itemLi.dataset.id = item.id;
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'todo-item-checkbox';
+        checkbox.checked = !!item.done;
+        checkbox.addEventListener('change', async () => {
+          const config = await getConfig();
+          const activePage = getActivePage(config);
+          const cfgFolder = activePage.folders.find(f => f.name === folder.name);
+          const cfgItem = cfgFolder && (cfgFolder.items || []).find(i => i.id === item.id);
+          if (cfgItem) {
+            cfgItem.done = checkbox.checked;
+            cfgItem.lastModified = Date.now();
+            cfgFolder.lastModified = Date.now();
+            await applyLocalChange(config, currentPageId);
+          }
+        });
+
+        const text = document.createElement('span');
+        text.className = 'todo-item-text';
+        text.textContent = item.text;
+
+        itemLi.appendChild(checkbox);
+        itemLi.appendChild(text);
+        itemLi.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          showContextMenu(e.clientX, e.clientY, { type: 'todo-item', folderName: folder.name, itemId: item.id });
+        });
+
+        todoList.appendChild(itemLi);
+      });
+
+      const addRow = document.createElement('div');
+      addRow.className = 'todo-add-row';
+      const addInput = document.createElement('input');
+      addInput.type = 'text';
+      addInput.className = 'todo-add-input';
+      addInput.placeholder = 'Add item…';
+      addInput.autocomplete = 'off';
+      const addBtnEl = document.createElement('button');
+      addBtnEl.type = 'button';
+      addBtnEl.className = 'todo-add-btn';
+      addBtnEl.textContent = '+';
+
+      const submitNewItem = async () => {
+        const text = addInput.value.trim();
+        if (!text) return;
+        const config = await getConfig();
+        const activePage = getActivePage(config);
+        const cfgFolder = activePage.folders.find(f => f.name === folder.name);
+        if (!cfgFolder) return;
+        cfgFolder.items = cfgFolder.items || [];
+        cfgFolder.items.push({ id: generateItemId(), text, done: false, lastModified: Date.now() });
+        cfgFolder.lastModified = Date.now();
+        await applyLocalChange(config, currentPageId);
+      };
+      addInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); submitNewItem(); }
+      });
+      addBtnEl.addEventListener('click', submitNewItem);
+      addRow.appendChild(addInput);
+      addRow.appendChild(addBtnEl);
+
+      folderBody.appendChild(todoList);
+      folderBody.appendChild(addRow);
+    } else {
     // --- Bookmarks grid ---
     const bookmarksList = document.createElement('ul');
     bookmarksList.className = 'bookmarks-list';
@@ -898,6 +1027,9 @@ async function renderBookmarks(config) {
       });
     }
 
+    folderBody.appendChild(bookmarksList);
+    }
+
     const resizeHandle = document.createElement('div');
     resizeHandle.className = 'folder-resize-handle';
     resizeHandle.title = 'Drag to resize folder';
@@ -915,8 +1047,6 @@ async function renderBookmarks(config) {
       };
       folderDiv.classList.add('is-resizing');
     });
-
-    folderBody.appendChild(bookmarksList);
 
     folderDiv.appendChild(titlebar);
     folderDiv.appendChild(folderBody);
@@ -1119,7 +1249,7 @@ async function openAddModal(preselectFolder = null) {
   try {
     const config = await getConfig();
     const activePage = getActivePage(config);
-    folders = (activePage && activePage.folders) || [];
+    folders = ((activePage && activePage.folders) || []).filter(f => f.type !== 'todo');
   } catch (e) {
     // no folders yet
   }
@@ -1208,8 +1338,8 @@ function openEditModal(target) {
   editModalSaveBtn.disabled = false;
   editModalSaveBtn.textContent = 'Save';
 
-  if (target.type === 'folder') {
-    editModalTitle.textContent = 'Edit Folder';
+  if (target.type === 'folder' || target.type === 'todo') {
+    editModalTitle.textContent = target.type === 'todo' ? 'Edit Todo List' : 'Edit Folder';
     editFolderNameGroup.classList.remove('hidden');
     editFolderWidthGroup.classList.remove('hidden');
     editFolderMinHeightGroup.classList.remove('hidden');
@@ -1245,7 +1375,7 @@ function openEditModal(target) {
   }
 
   editModal.classList.remove('hidden');
-  if (target.type === 'folder') {
+  if (target.type === 'folder' || target.type === 'todo') {
     editFolderNameInput.focus();
     editFolderNameInput.select();
   } else {
@@ -1270,7 +1400,7 @@ async function saveEdit() {
     const config = await getConfig();
     const activePage = getActivePage(config);
 
-    if (editTarget.type === 'folder') {
+    if (editTarget.type === 'folder' || editTarget.type === 'todo') {
       const newName = editFolderNameInput.value.trim();
       if (!newName) { showEditModalError('Please enter a folder name.'); editModalSaveBtn.disabled = false; editModalSaveBtn.textContent = 'Save'; return; }
       if (newName !== editTarget.folderName && activePage.folders.find(f => f.name === newName)) {
@@ -1373,6 +1503,34 @@ addModal.addEventListener('click', (e) => { if (e.target === addModal) closeAddM
 modalSaveBtn.addEventListener('click', saveNewBookmark);
 bmFolder.addEventListener('change', () => {
   newFolderGroup.classList.toggle('hidden', bmFolder.value !== '__new__');
+});
+
+// Add todo list button
+addTodoBtn.addEventListener('click', async () => {
+  const name = prompt('New todo list name:', 'To-Do');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  try {
+    const config = await getConfig() || { pages: [{ id: 'page-1', name: 'Bookmarks', folders: [] }] };
+    ensurePages(config);
+    const activePage = getActivePage(config);
+    if (activePage.folders.find(f => f.name === trimmed)) {
+      showStatus('A folder or list with that name already exists.', 'error');
+      return;
+    }
+    activePage.folders.push({
+      type: 'todo',
+      name: trimmed,
+      items: [],
+      itemTombstones: [],
+      icon: '✅',
+      lastModified: Date.now(),
+    });
+    await applyLocalChange(config, currentPageId);
+    showStatus('Todo list added!', 'success');
+  } catch (error) {
+    showStatus(`Error: ${error.message}`, 'error');
+  }
 });
 
 // Sync button: push local config to GitHub immediately

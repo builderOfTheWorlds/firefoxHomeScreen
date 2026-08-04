@@ -8,18 +8,62 @@
 
 ---
 
+## Starting a Conversation
+
+- At the start of every new conversation, read the project's `README.md` to understand the project's purpose, structure, and how it operates before taking any action.
+
+## Plans & Prompts
+
+- Save implementation plans and reusable prompt context to `.claude/prompts/` within the project directory.
+- This is the default location for all plans, prompt templates, and task context files.
+- File naming: use descriptive snake_case names (e.g., `financial_dashboard_db.md`, `auth_refactor.md`).
+- Plans saved here persist across conversations and serve as the starting context for resumed work.
+
+## Task Execution Strategy
+
+- For complex or multi-step tasks, delegate work to sub-agents (using the Task tool) rather than doing everything in the main context window.
+- Use multiple sub-agents in parallel when tasks are independent of each other.
+- Keep the main context window clean and focused on orchestration — let sub-agents handle research, exploration, and implementation details.
+- This preserves context budget for decision-making and user interaction, and allows longer, more complex sessions without hitting context limits.
+
 ## Code Structure
 
 - Follow consistent project structure conventions.
 - Keep business logic separated from infrastructure/framework code.
 - Prefer flat directory structures over deeply nested ones.
 
+### File Organization
+
+- Every project should have a `main.py` (or equivalent entry point) that handles high-level orchestration — calling major functions and classes, but containing minimal logic itself.
+- Functions and classes called from the entry point should live in their own files under a `src/` directory.
+- File names should match the primary function or class they contain (snake_case for Python).
+- **When to keep a single file**: If a function/class and its helpers are small and low-complexity, keep them together in one file.
+- **When to split**: If a file's logic grows in complexity or size (multiple responsibilities, many helpers, hard to follow), break it into separate files — each focused on a single concern.
+- Use `__init__.py` (Python) or index files to expose the public API of a module.
+- Group related files into subdirectories when a logical grouping emerges (e.g., `src/auth/`, `src/api/`).
+
 ## Logging
 
 - Use structured logging (key-value pairs) rather than unstructured string messages.
 - Include correlation/request IDs in log entries for traceability.
-- Log at appropriate levels: DEBUG for development, INFO for operational events, WARN for recoverable issues, ERROR for failures requiring attention.
 - Never log sensitive data (passwords, tokens, PII).
+
+### Log Level Strategy
+
+- **TRACE**: Function entry and exit points. Log function name, parameters on entry, and return value on exit.
+- **DEBUG**: Branching/decision points, significant state changes, and locations where errors could occur. Include contextual data (variable values, conditions evaluated).
+- **INFO**: Operational events — successful completions of major operations, startup/shutdown, configuration loaded.
+- **WARN**: Recoverable issues — retries, fallback paths taken, deprecated usage detected.
+- **ERROR**: All error handling blocks. Log the exception/error, contextual state, and what operation failed. Always inside try-catch or error handlers.
+
+### Where to Log
+
+- Every function entry and exit (TRACE).
+- Every conditional branch or decision point (DEBUG).
+- Before and after calls to external services, databases, or file I/O (DEBUG).
+- Inside all error handling blocks (ERROR).
+- State transitions and significant value changes (DEBUG).
+- Successful completion of high-level operations (INFO).
 
 ## Error Handling
 
@@ -33,6 +77,70 @@
 - Keep functions focused — single responsibility.
 - Prefer explicit over implicit behavior.
 
+## Documentation Generation
+
+- When creating or significantly modifying a function/class, generate a corresponding markdown doc file in a `docs/` directory.
+- One doc file per function or class, named to match (e.g., `docs/generate_screenshots.md`).
+- Documentation template sections:
+  - **Overview**: What the function does and why it exists.
+  - **Signature**: Full function signature with types.
+  - **Parameters**: Each parameter with type, required/optional, defaults, and constraints.
+  - **Return Value**: What is returned, including type and possible values.
+  - **Dependencies**: Imports, external libraries, and other internal functions used.
+  - **Usage Examples**: At least 2 real-world usage examples with code blocks.
+  - **Error Handling**: Exceptions that can be raised and under what conditions.
+  - **Changelog**: Version history with dates and brief descriptions of changes.
+- Keep documentation synchronized — when a function's signature, parameters, or behavior change, update its doc file.
+- Use semantic versioning in changelogs (v1.0.0, v1.1.0, etc.).
+
+## README Generation
+
+- Every project must have a `README.md` at its root.
+- Generate the `README.md` when a project is first created. Update it whenever the project's purpose, structure, dependencies, or usage instructions change significantly.
+
+### README Template Sections
+
+- **Project Title**: Clear, descriptive name of the project.
+- **Summary**: 2-4 sentences explaining what the project does, the problem it solves, and who it's for.
+- **Prerequisites**: Required software, runtimes, and tools (with minimum versions) needed before installation.
+- **Installation**: Step-by-step instructions to get the project running locally — clone, install dependencies, configure environment.
+- **Usage**: How to operate the project day-to-day. Include CLI commands, common workflows, and example invocations with expected output.
+- **Configuration**: Describe any config files, environment variables, or settings the user may need to adjust.
+- **Project Structure**: Brief overview of the directory layout and what each key file/folder is responsible for.
+- **Contributing** *(optional)*: Guidelines for contributing if the project accepts outside contributions.
+- **License** *(optional)*: License information if applicable.
+
+### README Guidelines
+
+- Write for someone who has never seen the project before — assume no prior context.
+- Keep language concise and scannable; use bullet points, code blocks, and headers liberally.
+- All CLI commands and code examples must be copy-pasteable and correct.
+- Update the README as part of any change that alters installation steps, CLI commands, configuration, or project structure.
+- Do not duplicate detailed API documentation in the README — link to the `docs/` directory instead.
+
+## Python Virtual Environment
+
+<!-- When setting up a new project or starting work on an existing one, always use a project-local .venv -->
+
+- At the start of every conversation involving a Python project, check whether a `.venv` directory exists at the project root.
+- If `.venv` does **not** exist, create one: `python -m venv .venv`
+- Always use the project's `.venv` for all Python operations — installing dependencies, running scripts, and executing tests.
+- Activate with: `.venv/Scripts/activate` (Windows) or `source .venv/bin/activate` (Linux/macOS).
+- Install project dependencies into the `.venv` after creation (e.g., `pip install -r requirements.txt` if available).
+- Never install packages into the global/system Python when working on a project.
+
+## Shared Utilities and Imported Packages
+
+When a project imports or depends on a shared local utility (e.g. `utilities-web`, `projectManager` libs, or any other sibling repository installed via `pip install -e`), **never modify those shared packages to accommodate a single project's needs**. Changes to shared utilities affect every project that depends on them and can introduce regressions elsewhere.
+
+Instead, keep all project-specific customisations local:
+
+- **Templates**: Override shared templates by placing a local copy in the project's own `templates/` directory and configuring the app to load it first (e.g. Jinja2 `ChoiceLoader`).
+- **Behaviour**: Subclass or wrap shared classes/functions locally rather than modifying the originals.
+- **Configuration**: Use project-level config files or environment variables to vary behaviour without touching shared code.
+
+If a change genuinely belongs in the shared utility (i.e. it is useful to all consumers and introduces no breaking changes), discuss it explicitly before touching the shared package — do not make the change as a side-effect of project work.
+
 ## Dependencies
 
 - Pin dependency versions for reproducible builds.
@@ -41,13 +149,85 @@
 
 ## Testing
 
-- Write tests for business logic and edge cases.
+- Use pytest as the test framework. Test files live in a `tests/` directory.
+- Test file naming: `test_{function_name}.py`.
+- Test function naming: `test_{what_is_being_tested}_{expected_outcome}`.
 - Tests should be independent and not rely on execution order.
-- Use descriptive test names that explain the expected behavior.
+- Mock external dependencies (APIs, file system, databases, subprocesses) — never rely on real external services in unit tests.
+
+### Smart Test Coverage — Scale Tests to Complexity
+
+- **Small/simple functions** (getters, formatters, one-liners): No dedicated tests needed — logging alone is sufficient. Only add tests if the function has tricky edge cases.
+- **Medium-complexity functions** (clear inputs/outputs, some branching): Write basic tests covering valid input, invalid input, and expected return values. 2-4 test cases.
+- **Large/complex functions** (multiple responsibilities, significant branching, external calls, error paths): Write comprehensive tests including happy path, edge cases, error handling, and parametrized input variations. Use fixtures for setup/teardown. Aim for full path coverage on critical business logic.
+
+### Test Guidelines
+
+- Use `@pytest.mark.parametrize` for testing multiple input combinations on medium+ functions.
+- Use `pytest.fixture` for common setup and teardown.
+- Categorize tests with markers when useful: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`.
+- Target 80%+ code coverage on business logic (use `pytest-cov`).
+- Every test should clean up after itself.
 
 ---
 
 <!-- SHARED ADDITIONS FROM PROJECTS WILL BE APPENDED BELOW THIS LINE -->
+
+## Centralized Logging (Grafana + Loki)
+
+A shared Grafana + Loki stack runs at `http://localhost:3002` (Grafana) and `http://localhost:3100` (Loki). All projects should push structured logs to Loki after completing major operations so they're visible in a single dashboard.
+
+### Configuration
+
+Loki settings live in the `projectManager` repo's `config.yaml`:
+
+```yaml
+loki:
+  enabled: true
+  url: http://localhost:3100
+```
+
+### How to Push Logs
+
+Use the shared `loki_push` module from `projectManager/src/loki_push.py`. Add the `src/` directory to your Python path, then call `push()`:
+
+```python
+import sys
+from pathlib import Path
+
+# Add projectManager/src to path (adjust relative path as needed)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+import loki_push
+
+# Push a log entry
+loki_push.push(
+    {"app": "your_app_name", "operation": "your_operation"},
+    "Human-readable message",
+    level="info",                              # debug, info, warn, error
+    extra={"key": "value", "duration_ms": 42}  # optional structured data
+)
+```
+
+### Labels Convention
+
+- **`app`**: Identifies the project/utility (e.g. `claude_md`, `claude_backup`, `your_project`).
+- **`operation`**: Identifies the specific operation (e.g. `sync`, `sweep`, `build`).
+- **`level`**: Log level — automatically added by `push()`.
+
+### Behavior
+
+- **Fire-and-forget**: If Loki is down or `loki.enabled` is `false`, the push silently returns `False`. It never raises exceptions or crashes the caller.
+- **No dependencies beyond PyYAML**: Uses `urllib.request` from the standard library.
+- Push after successful operations (INFO) and inside error handlers (ERROR) at minimum.
+
+### Viewing Logs
+
+Open Grafana at `http://localhost:3002` → Explore → select the **Loki** datasource → query by label:
+
+- `{app="your_app_name"}` — all logs for your project
+- `{level="error"}` — all errors across all projects
+- `{app="your_app_name", operation="sync"}` — filter by operation
+
 ### Added from handjamDungeon — 2026-02-08 18:21
 
 ## Git Commit Conventions
@@ -56,6 +236,84 @@
 - Types: feat, fix, docs, style, refactor, test, chore
 - Keep subject line under 72 characters
 
+
+---
+
+## Deployment Scripts (install.sh)
+
+When a user asks you to create or set up a deployment script (`install.sh`) for a project, read the full guide before proceeding:
+
+- **Guide**: [`projectManager/docs/install_sh_guide.md`](../../projectManager/docs/install_sh_guide.md)
+
+The guide covers the standard structure, a copy-pasteable boilerplate template, a customization checklist, required project files, and conventions to follow. The reference implementation is `AdvancedProfileMigrationUtility/install.sh`.
+
+---
+
+## Git Repository Setup
+
+When setting up a new GitHub repository:
+
+- Create an empty `master` branch as the default branch (no code, just an initial empty commit).
+- Create a `workingBranch` branch that contains all the project code.
+- Set `master` as the default branch in GitHub Settings → General → Default branch.
+- This keeps `master` clean and prevents branch protection rules from blocking direct pushes to `workingBranch`.
+
+To create the empty master branch locally:
+```bash
+git checkout --orphan master
+git rm -rf .
+git commit --allow-empty -m "chore: initial empty master branch"
+git push origin master
+git checkout -b workingBranch
+git push origin workingBranch
+```
+
+---
+
+## Mafober Deployment Environment
+
+Projects created or cloned into the managed projects root (`projects_root` in `config.yaml`) deploy to **mafober**, a Proxmox VE homelab host that also runs the shared Docker/Portainer stack for this machine.
+
+### Connection
+
+| Item | Value |
+|------|-------|
+| Hostname | `mafober` |
+| IP Address | `192.168.1.117` |
+| Proxmox Web UI | `https://192.168.1.117:8006` |
+| Portainer (Docker mgmt) | `https://192.168.1.120:9443` |
+| SSH / SFTP | port `22` on `192.168.1.117` |
+
+### Deploying a new project
+
+1. Create a ZFS dataset under `tank_0` for the project's persistent storage (`zfs create tank_0/utilities/<project>`) rather than relying on ephemeral CT storage or named Docker volumes.
+2. `chown` the new dataset to the UID/GID the container image expects (e.g. `1000:1000` for linuxserver images, `472:472` for Grafana-style images).
+3. Add an explicit bind mount for the dataset into CT 101 (the Portainer LXC): `pct set 101 -mp<N> /tank_0/utilities/<project>,mp=/tank_0/utilities/<project>`, then `pct restart 101`. Each ZFS dataset needs its own `mp` entry — mounting a parent dataset does not expose its children.
+4. Define the stack/container in Portainer (`https://192.168.1.120:9443`) pointing at the bind-mounted path.
+5. If the project should be scraped by Prometheus or shipped logs to Grafana, register it alongside the existing dashboards/exporters on the host.
+
+### Currently deployed on mafober
+
+- **Portainer** — Docker/stack management (CT 101)
+- **Plex** — media server
+- **qBittorrent** — torrent client
+- **Grafana** — dashboards
+- **Prometheus** — metrics
+- **node_exporter** / **zfs_exporter** — host-level metrics, run directly on the Proxmox host (not containerized)
+
+### More info
+
+Full hardware specs, ZFS layout, container configs, and troubleshooting lessons learned live in `mafober/mafober_summary.md` (a sibling project directory under the managed projects root). Check there first if these details aren't enough.
+
+---
+
+## Concluding a Conversation
+
+When the user explicitly instructs an agent to "conclude the conversation" (or an equivalent closing phrase), treat it as a three-step close-out sequence rather than just ending the reply:
+
+1. **Write the session backup now.** Don't wait for the `SessionEnd` hook to fire on its own — invoke the existing parser (`claudeBackupUtility/.claude/hooks/log_session.py`'s `parse_session()`, or run `sweep_stale_sessions.py`) against the current transcript so `conversation.md` and the tool-call files land in `claudeBackupUtility/logs/claude/<project>/` before the session actually ends.
+2. **Remind the user to close the panel — don't try to do it yourself.** No Claude Code tool can control the VS Code UI. End the final message with an explicit reminder (e.g. "You can close this panel now") instead of attempting the action.
+3. **Forward the finalized conversation to a processing API.** This is a placeholder for future work — no such endpoint exists yet (as of 2026-07-18). Once one is configured (URL + auth wired into `config.yaml`), POST the finalized transcript/log output to it here. Until then, skip this step silently rather than guessing a URL.
 
 ---
 

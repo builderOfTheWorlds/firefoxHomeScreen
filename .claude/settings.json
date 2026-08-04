@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check src/newtab.js)",
+      "Bash(node --check src/github-sync.js)",
+      "Bash(npx --version)",
+      "Bash(npx web-ext *)",
+      "Bash(npx --yes web-ext lint --source-dir=.)",
+      "Read(//c/Program Files/Mozilla Firefox/**)",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/Mozilla Firefox/**)",
+      "Bash(mkdir -p \"/c/Users/matt/AppData/Local/Temp/claude/c--Users-matt-PycharmProjects-firefoxHomeScreen-extension/2fd7b169-0202-459e-8b9f-96604b7e4312/scratchpad/webext-profile\" *)",
+      "Bash(taskkill //F //IM firefox.exe)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\matt\\AppData\\Local\\Temp\\claude\\c--Users-matt-PycharmProjects-firefoxHomeScreen-extension\\2fd7b169-0202-459e-8b9f-96604b7e4312\\scratchpad"
+    ]
+  }
+}

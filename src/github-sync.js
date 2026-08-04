@@ -406,13 +406,23 @@ class GitHubSync {
       // Deletion wins if it happened after the winner's last edit.
       if (deletedAt !== undefined && deletedAt >= (winner.lastModified || 0)) continue;
 
-      const bmTombstones = this._mergeTombstoneArrays(
-        local?.bookmarkTombstones || [], remote?.bookmarkTombstones || [], 'url'
-      );
-      const bookmarks = this._mergeBookmarks(
-        local?.bookmarks || [], remote?.bookmarks || [], bmTombstones
-      );
-      resolved.set(name, { ...winner, bookmarks, bookmarkTombstones: bmTombstones });
+      if (winner.type === 'todo') {
+        const itemTombstones = this._mergeTombstoneArrays(
+          local?.itemTombstones || [], remote?.itemTombstones || [], 'id'
+        );
+        const items = this._mergeEntities(
+          local?.items || [], remote?.items || [], itemTombstones, 'id'
+        );
+        resolved.set(name, { ...winner, items, itemTombstones });
+      } else {
+        const bmTombstones = this._mergeTombstoneArrays(
+          local?.bookmarkTombstones || [], remote?.bookmarkTombstones || [], 'url'
+        );
+        const bookmarks = this._mergeEntities(
+          local?.bookmarks || [], remote?.bookmarks || [], bmTombstones, 'url'
+        );
+        resolved.set(name, { ...winner, bookmarks, bookmarkTombstones: bmTombstones });
+      }
     }
 
     // Use remote folder order as the base; append local-only folders at the end.
@@ -423,26 +433,28 @@ class GitHubSync {
     return order.map(n => resolved.get(n));
   }
 
-  _mergeBookmarks(localBms, remoteBms, tombstones) {
-    const tombstoneMap = new Map(tombstones.map(t => [t.url, t.deletedAt]));
-    const localMap = new Map(localBms.map(b => [b.url, b]));
-    const remoteMap = new Map(remoteBms.map(b => [b.url, b]));
-    const allUrls = new Set([...localMap.keys(), ...remoteMap.keys()]);
+  // Generic last-write-wins merge for a list of tombstone-tracked entities
+  // (bookmarks keyed by 'url', todo items keyed by 'id').
+  _mergeEntities(localList, remoteList, tombstones, keyField) {
+    const tombstoneMap = new Map(tombstones.map(t => [t[keyField], t.deletedAt]));
+    const localMap = new Map(localList.map(e => [e[keyField], e]));
+    const remoteMap = new Map(remoteList.map(e => [e[keyField], e]));
+    const allKeys = new Set([...localMap.keys(), ...remoteMap.keys()]);
 
     const resolved = new Map();
-    for (const url of allUrls) {
-      const winner = this._pickWinner(localMap.get(url), remoteMap.get(url));
+    for (const key of allKeys) {
+      const winner = this._pickWinner(localMap.get(key), remoteMap.get(key));
       if (!winner) continue;
-      const deletedAt = tombstoneMap.get(url);
+      const deletedAt = tombstoneMap.get(key);
       if (deletedAt !== undefined && deletedAt >= (winner.lastModified || 0)) continue;
-      resolved.set(url, winner);
+      resolved.set(key, winner);
     }
 
     const order = [
-      ...remoteBms.map(b => b.url).filter(u => resolved.has(u)),
-      ...localBms.map(b => b.url).filter(u => resolved.has(u) && !remoteMap.has(u)),
+      ...remoteList.map(e => e[keyField]).filter(k => resolved.has(k)),
+      ...localList.map(e => e[keyField]).filter(k => resolved.has(k) && !remoteMap.has(k)),
     ];
-    return order.map(u => resolved.get(u));
+    return order.map(k => resolved.get(k));
   }
 
   // Return whichever entity has the later lastModified, preferring remote on tie.
@@ -458,10 +470,10 @@ class GitHubSync {
     return {
       ...page,
       folderTombstones: (page.folderTombstones || []).filter(t => t.deletedAt > cutoff),
-      folders: (page.folders || []).map(f => ({
-        ...f,
-        bookmarkTombstones: (f.bookmarkTombstones || []).filter(t => t.deletedAt > cutoff),
-      })),
+      folders: (page.folders || []).map(f => f.type === 'todo'
+        ? { ...f, itemTombstones: (f.itemTombstones || []).filter(t => t.deletedAt > cutoff) }
+        : { ...f, bookmarkTombstones: (f.bookmarkTombstones || []).filter(t => t.deletedAt > cutoff) }
+      ),
     };
   }
 

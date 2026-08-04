@@ -439,6 +439,88 @@ header {
   width: 100%;
 }
 
+.todo-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.todo-item:hover {
+  background: color-mix(in srgb, var(--folder-titlebar-color1) 10%, var(--folder-bg));
+}
+
+.todo-item-checkbox {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--folder-titlebar-color1);
+}
+
+.todo-item-text {
+  font-size: var(--bookmark-title-font-size, 0.65rem);
+  font-family: var(--bookmark-title-font-family, inherit);
+  color: var(--folder-text-color);
+  overflow-wrap: break-word;
+  flex: 1;
+}
+
+.todo-item.done .todo-item-text {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.todo-add-row {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.todo-add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--folder-text-color) 25%, transparent);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--folder-text-color);
+  background: var(--folder-bg);
+}
+
+.todo-add-input:focus {
+  outline: none;
+  border-color: var(--folder-titlebar-color1);
+}
+
+.todo-add-btn {
+  flex-shrink: 0;
+  width: 28px;
+  border: none;
+  border-radius: 6px;
+  background: var(--folder-titlebar-color1);
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.todo-add-btn:hover {
+  background: color-mix(in srgb, var(--folder-titlebar-color1) 85%, black);
+}
+
 .no-config {
   background: white;
   border-radius: 12px;
@@ -664,11 +746,15 @@ header {
   background: #f7fafc;
 }
 
-#ctx-remove {
+#ctx-remove,
+#ctx-remove-item,
+#ctx-delete-list {
   color: #e53e3e;
 }
 
-#ctx-remove:hover {
+#ctx-remove:hover,
+#ctx-remove-item:hover,
+#ctx-delete-list:hover {
   background: #fff5f5;
 }
 
