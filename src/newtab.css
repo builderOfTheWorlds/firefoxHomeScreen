@@ -226,11 +226,17 @@ header {
 }
 
 .folder.has-explicit-size .folder-body {
-  overflow: hidden;
+  overflow-y: hidden;
+  overflow-x: auto;
 }
 
 .folder.has-explicit-size .bookmarks-list {
   overflow-y: auto;
+}
+
+.folder.has-explicit-size .todo-list {
+  width: 100%;
+  min-width: 720px;
 }
 
 .folder-titlebar {
@@ -440,32 +446,59 @@ header {
 }
 
 .todo-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  table-layout: fixed;
+  width: 720px;
+  border-collapse: separate;
+  border-spacing: 0 0.35rem;
+}
+
+.todo-list thead th {
+  text-align: left;
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--folder-text-color);
+  opacity: 0.5;
+  padding: 0 0.5rem 0.15rem;
+}
+
+.todo-col-text {
+  width: 228px;
+}
+
+.todo-col-date {
+  width: 128px;
+  white-space: nowrap;
+}
+
+.todo-col-shortdate {
+  width: 96px;
+  white-space: nowrap;
 }
 
 .todo-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
   user-select: none;
+  cursor: pointer;
+}
+
+.todo-item td {
+  padding: 0.35rem 0.5rem;
+  background: color-mix(in srgb, black 8%, var(--folder-bg));
+  box-shadow: 0 1px 2px color-mix(in srgb, black 25%, transparent);
   transition: background 0.15s ease;
 }
 
-.todo-item:hover {
-  background: color-mix(in srgb, var(--folder-titlebar-color1) 10%, var(--folder-bg));
+.todo-item td:first-child {
+  border-radius: 6px 0 0 6px;
 }
 
-.todo-item-checkbox {
-  flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-  cursor: pointer;
-  accent-color: var(--folder-titlebar-color1);
+.todo-item td:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.todo-item:hover td {
+  background: color-mix(in srgb, var(--folder-titlebar-color1) 15%, var(--folder-bg));
 }
 
 .todo-item-text {
@@ -473,7 +506,56 @@ header {
   font-family: var(--bookmark-title-font-family, inherit);
   color: var(--folder-text-color);
   overflow-wrap: break-word;
-  flex: 1;
+}
+
+.todo-item-date {
+  font-size: 0.6rem;
+  color: var(--folder-text-color);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.todo-item-date-line,
+.todo-item-time-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-item-time-line {
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+.todo-item-notes {
+  font-size: 0.6rem;
+  color: #ffffff;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.todo-item-notes.empty {
+  opacity: 0.35;
+  font-style: italic;
+}
+
+.todo-inline-input {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid var(--folder-titlebar-color1);
+  border-radius: 4px;
+  color: var(--folder-text-color);
+  background: var(--folder-bg);
+}
+
+.todo-inline-input:focus {
+  outline: none;
 }
 
 .todo-item.done .todo-item-text {
@@ -602,7 +684,8 @@ header {
 }
 
 .modal-group input,
-.modal-group select {
+.modal-group select,
+.modal-group textarea {
   padding: 0.6rem 0.75rem;
   border: 2px solid #e2e8f0;
   border-radius: 6px;
@@ -612,8 +695,14 @@ header {
   color: #2d3748;
 }
 
+.modal-group textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
 .modal-group input:focus,
-.modal-group select:focus {
+.modal-group select:focus,
+.modal-group textarea:focus {
   outline: none;
   border-color: #667eea;
 }

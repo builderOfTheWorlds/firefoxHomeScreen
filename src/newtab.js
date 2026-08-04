@@ -26,6 +26,7 @@ const settingsBtn = document.getElementById('settings-btn');
 const settingsLink = document.getElementById('settings-link');
 const contextMenu = document.getElementById('context-menu');
 const ctxRemove = document.getElementById('ctx-remove');
+const ctxEditItem = document.getElementById('ctx-edit-item');
 const ctxRemoveItem = document.getElementById('ctx-remove-item');
 const ctxDeleteList = document.getElementById('ctx-delete-list');
 const ctxAddLink = document.getElementById('ctx-add-link');
@@ -297,6 +298,7 @@ function showContextMenu(x, y, target) {
   ctxMovePage.classList.toggle('hidden', !isFolderLike);
   ctxRemove.classList.toggle('hidden', target.type !== 'bookmark');
   ctxRefreshScreenshot.classList.toggle('hidden', target.type !== 'bookmark');
+  ctxEditItem.classList.toggle('hidden', target.type !== 'todo-item');
   ctxRemoveItem.classList.toggle('hidden', target.type !== 'todo-item');
   ctxDeleteList.classList.toggle('hidden', target.type !== 'todo');
   ctxEdit.classList.toggle('hidden', target.type === 'todo-item');
@@ -458,6 +460,31 @@ ctxRemove.addEventListener('click', async () => {
   }
 });
 
+ctxEditItem.addEventListener('click', async () => {
+  if (!ctxTarget) return;
+  const { folderName, itemId } = ctxTarget;
+  hideContextMenu();
+
+  try {
+    const config = await getConfig();
+    const activePage = getActivePage(config);
+    const folder = activePage.folders.find(f => f.name === folderName);
+    const item = folder && (folder.items || []).find(i => i.id === itemId);
+    if (!item) return;
+    const newText = prompt('Edit item:', item.text);
+    if (newText === null) return;
+    const trimmed = newText.trim();
+    if (!trimmed || trimmed === item.text) return;
+    item.text = trimmed;
+    item.lastModified = Date.now();
+    folder.lastModified = Date.now();
+    await applyLocalChange(config, currentPageId);
+    showStatus('Item updated!', 'success');
+  } catch (error) {
+    showStatus(`Error: ${error.message}`, 'error');
+  }
+});
+
 ctxRemoveItem.addEventListener('click', async () => {
   if (!ctxTarget) return;
   const { folderName, itemId } = ctxTarget;
@@ -554,6 +581,80 @@ const FOLDER_DEFAULT_ROW_H = 300;
 function generateItemId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// Renders a timestamp into a cell as two stacked lines (date, then time)
+// rather than one long inline string.
+function renderTodoTimestamp(cell, ts) {
+  cell.textContent = '';
+  if (!ts) {
+    cell.textContent = '—';
+    return;
+  }
+  const d = new Date(ts);
+  const dateLine = document.createElement('div');
+  dateLine.className = 'todo-item-date-line';
+  dateLine.textContent = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const timeLine = document.createElement('div');
+  timeLine.className = 'todo-item-time-line';
+  timeLine.textContent = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  cell.appendChild(dateLine);
+  cell.appendChild(timeLine);
+}
+
+// item.date is a plain 'YYYY-MM-DD' string (from <input type="date">) — parse as
+// local time, not UTC, so it doesn't shift a day in negative-UTC-offset zones.
+function formatDateOnly(dateStr) {
+  if (!dateStr) return '—';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// Shared read-modify-save helper for todo item field edits.
+async function updateTodoItem(folderName, itemId, mutate) {
+  const config = await getConfig();
+  const activePage = getActivePage(config);
+  const cfgFolder = activePage.folders.find(f => f.name === folderName);
+  const cfgItem = cfgFolder && (cfgFolder.items || []).find(i => i.id === itemId);
+  if (!cfgItem) return;
+  mutate(cfgItem);
+  cfgItem.lastModified = Date.now();
+  cfgFolder.lastModified = Date.now();
+  await applyLocalChange(config, currentPageId);
+}
+
+// Replace a table cell's text with an <input>, committing on blur/Enter and
+// reverting on Escape or an unchanged value. onCommit returning `false` also
+// reverts (used for validation failures like an empty name).
+function startInlineEdit(cell, { type = 'text', value = '', placeholder = '', onCommit }) {
+  const originalDisplay = cell.textContent;
+  let finished = false;
+  const revert = () => { if (finished) return; finished = true; cell.textContent = originalDisplay; };
+
+  cell.textContent = '';
+  const input = document.createElement('input');
+  input.type = type;
+  input.className = 'todo-inline-input';
+  input.value = value || '';
+  if (placeholder) input.placeholder = placeholder;
+  cell.appendChild(input);
+  input.focus();
+  if (type === 'text') input.select();
+  if (type === 'date' && input.showPicker) { try { input.showPicker(); } catch {} }
+
+  input.addEventListener('blur', async () => {
+    if (finished) return;
+    const newValue = input.value;
+    if (newValue === (value || '')) { revert(); return; }
+    finished = true; // a save is happening — the resulting re-render replaces this DOM
+    const result = await onCommit(newValue);
+    if (result === false) { finished = false; revert(); }
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); revert(); }
+  });
 }
 
 // Render page tabs and the "+" add-page button
@@ -821,45 +922,105 @@ async function renderBookmarks(config) {
     folderBody.className = 'folder-body';
 
     if (folder.type === 'todo') {
-      // --- Todo list ---
-      const todoList = document.createElement('ul');
+      // --- Todo table ---
+      const todoList = document.createElement('table');
       todoList.className = 'todo-list';
 
-      (folder.items || []).forEach((item) => {
-        const itemLi = document.createElement('li');
-        itemLi.className = 'todo-item' + (item.done ? ' done' : '');
-        itemLi.dataset.id = item.id;
+      const todoHead = document.createElement('thead');
+      todoHead.innerHTML = '<tr>'
+        + '<th class="todo-col-text">Item</th>'
+        + '<th class="todo-col-date">Added</th>'
+        + '<th class="todo-col-date">Completed</th>'
+        + '<th class="todo-col-shortdate">Date</th>'
+        + '<th class="todo-col-notes">Notes</th>'
+        + '</tr>';
+      todoList.appendChild(todoHead);
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'todo-item-checkbox';
-        checkbox.checked = !!item.done;
-        checkbox.addEventListener('change', async () => {
-          const config = await getConfig();
-          const activePage = getActivePage(config);
-          const cfgFolder = activePage.folders.find(f => f.name === folder.name);
-          const cfgItem = cfgFolder && (cfgFolder.items || []).find(i => i.id === item.id);
-          if (cfgItem) {
-            cfgItem.done = checkbox.checked;
-            cfgItem.lastModified = Date.now();
-            cfgFolder.lastModified = Date.now();
-            await applyLocalChange(config, currentPageId);
-          }
+      const todoBody = document.createElement('tbody');
+
+      (folder.items || []).forEach((item) => {
+        const itemRow = document.createElement('tr');
+        itemRow.className = 'todo-item' + (item.done ? ' done' : '');
+        itemRow.dataset.id = item.id;
+
+        // Item name — double-click opens an inline text editor.
+        const textCell = document.createElement('td');
+        textCell.className = 'todo-item-text';
+        textCell.textContent = item.text;
+        textCell.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          startInlineEdit(textCell, {
+            type: 'text',
+            value: item.text,
+            onCommit: async (newVal) => {
+              const trimmed = newVal.trim();
+              if (!trimmed) return false;
+              await updateTodoItem(folder.name, item.id, (i) => { i.text = trimmed; });
+            },
+          });
         });
 
-        const text = document.createElement('span');
-        text.className = 'todo-item-text';
-        text.textContent = item.text;
+        // Added — auto-stamped on creation, read-only.
+        const addedCell = document.createElement('td');
+        addedCell.className = 'todo-item-date';
+        renderTodoTimestamp(addedCell, item.created);
 
-        itemLi.appendChild(checkbox);
-        itemLi.appendChild(text);
-        itemLi.addEventListener('contextmenu', (e) => {
+        // Completed — the only cell that toggles done; double-click flips it
+        // and (re-)stamps completedAt when closing.
+        const completedCell = document.createElement('td');
+        completedCell.className = 'todo-item-date';
+        renderTodoTimestamp(completedCell, item.completedAt);
+        completedCell.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          updateTodoItem(folder.name, item.id, (i) => {
+            i.done = !i.done;
+            if (i.done) i.completedAt = Date.now();
+          });
+        });
+
+        // Date — user-set due/target date. Double-click opens a native date
+        // input (its own placeholder shows the expected format).
+        const dateCell = document.createElement('td');
+        dateCell.className = 'todo-item-date';
+        dateCell.textContent = item.date ? formatDateOnly(item.date) : '—';
+        dateCell.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          startInlineEdit(dateCell, {
+            type: 'date',
+            value: item.date || '',
+            placeholder: 'yyyy-mm-dd',
+            onCommit: async (newVal) => {
+              await updateTodoItem(folder.name, item.id, (i) => { i.date = newVal || null; });
+            },
+          });
+        });
+
+        // Notes — double-click opens the notes modal (textarea) rather than
+        // inline editing, since notes can run to multiple lines.
+        const notesCell = document.createElement('td');
+        notesCell.className = 'todo-item-notes' + (item.notes ? '' : ' empty');
+        notesCell.textContent = item.notes ? item.notes : '+ Add note';
+        notesCell.title = item.notes || '';
+        notesCell.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          openNotesModal(folder.name, item.id, item.notes);
+        });
+
+        itemRow.appendChild(textCell);
+        itemRow.appendChild(addedCell);
+        itemRow.appendChild(completedCell);
+        itemRow.appendChild(dateCell);
+        itemRow.appendChild(notesCell);
+
+        itemRow.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           showContextMenu(e.clientX, e.clientY, { type: 'todo-item', folderName: folder.name, itemId: item.id });
         });
 
-        todoList.appendChild(itemLi);
+        todoBody.appendChild(itemRow);
       });
+
+      todoList.appendChild(todoBody);
 
       const addRow = document.createElement('div');
       addRow.className = 'todo-add-row';
@@ -881,7 +1042,7 @@ async function renderBookmarks(config) {
         const cfgFolder = activePage.folders.find(f => f.name === folder.name);
         if (!cfgFolder) return;
         cfgFolder.items = cfgFolder.items || [];
-        cfgFolder.items.push({ id: generateItemId(), text, done: false, lastModified: Date.now() });
+        cfgFolder.items.push({ id: generateItemId(), text, done: false, created: Date.now(), completedAt: null, date: null, notes: '', lastModified: Date.now() });
         cfgFolder.lastModified = Date.now();
         await applyLocalChange(config, currentPageId);
       };
@@ -1449,6 +1610,40 @@ async function saveEdit() {
 editModalSaveBtn.addEventListener('click', saveEdit);
 editModalCancelBtn.addEventListener('click', closeEditModal);
 editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+
+// Todo item notes modal
+const todoNotesModal = document.getElementById('todo-notes-modal');
+const todoNotesTextarea = document.getElementById('todo-notes-textarea');
+const todoNotesSaveBtn = document.getElementById('todo-notes-save-btn');
+const todoNotesCancelBtn = document.getElementById('todo-notes-cancel-btn');
+let notesEditTarget = null; // { folderName, itemId }
+
+function openNotesModal(folderName, itemId, currentNotes) {
+  notesEditTarget = { folderName, itemId };
+  todoNotesTextarea.value = currentNotes || '';
+  todoNotesModal.classList.remove('hidden');
+  todoNotesTextarea.focus();
+}
+
+function closeNotesModal() {
+  todoNotesModal.classList.add('hidden');
+  notesEditTarget = null;
+}
+
+async function saveNotes() {
+  if (!notesEditTarget) return;
+  const { folderName, itemId } = notesEditTarget;
+  const value = todoNotesTextarea.value;
+  await updateTodoItem(folderName, itemId, (cfgItem) => { cfgItem.notes = value; });
+  closeNotesModal();
+}
+
+todoNotesSaveBtn.addEventListener('click', saveNotes);
+todoNotesCancelBtn.addEventListener('click', closeNotesModal);
+todoNotesModal.addEventListener('click', (e) => { if (e.target === todoNotesModal) closeNotesModal(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !todoNotesModal.classList.contains('hidden')) closeNotesModal();
+});
 
 function showModalError(msg) {
   modalStatus.textContent = msg;

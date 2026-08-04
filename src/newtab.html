@@ -146,6 +146,21 @@
     </div>
   </div>
 
+  <div id="todo-notes-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Notes</h2>
+      <div class="modal-form">
+        <div class="modal-group">
+          <textarea id="todo-notes-textarea" rows="8" placeholder="Add notes…" autocomplete="off"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="todo-notes-save-btn" class="modal-btn modal-btn-primary">Save</button>
+        <button id="todo-notes-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="context-menu" class="context-menu hidden">
     <ul>
       <li id="ctx-add-link">Add Link to Folder</li>
@@ -154,6 +169,7 @@
       <li id="ctx-move-page">Move to Page ▶</li>
       <li id="ctx-refresh-screenshot">Refresh Screenshot</li>
       <li id="ctx-remove">Remove Bookmark</li>
+      <li id="ctx-edit-item">Edit Item</li>
       <li id="ctx-remove-item">Remove Item</li>
       <li id="ctx-delete-list">Delete List</li>
     </ul>

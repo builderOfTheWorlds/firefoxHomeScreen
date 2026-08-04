@@ -15,9 +15,21 @@ The menu is a single `<div id="context-menu">` with `<li>` items inside a `<ul>`
 // bookmark right-click
 { type: 'bookmark', folderName: string, bookmarkUrl: string }
 
-// folder right-click
+// bookmark-folder right-click
 { type: 'folder', folderName: string }
+
+// todo-list-card right-click (see docs/todo-widget.md)
+{ type: 'todo', folderName: string }
+
+// todo-item right-click
+{ type: 'todo-item', folderName: string, itemId: string }
 ```
+
+`'folder'` and `'todo'` are both "folder-like" — actions that don't care
+about content (Edit, Move to Page, Shrink to Fit) are shown for both via an
+`isFolderLike` check in `showContextMenu`. See
+[adding-widget-types.md](adding-widget-types.md) if you're adding a third
+card type and need to extend this union further.
 
 `showContextMenu(x, y, target)` positions the menu, sets `ctxTarget`, and toggles item visibility based on `target.type`.
 
@@ -51,6 +63,10 @@ ctxMyAction.classList.toggle('hidden', target.type !== 'bookmark');
 ctxMyAction.classList.toggle('hidden', target.type !== 'folder');
 
 // show for both — omit the toggle line entirely (always visible)
+
+// show for any "folder-like" card type (folder, todo, and any future widget)
+const isFolderLike = target.type === 'folder' || target.type === 'todo';
+ctxMyAction.classList.toggle('hidden', !isFolderLike);
 ```
 
 ### 4. Add a right-click source (if needed)
@@ -79,7 +95,13 @@ ctxMyAction.addEventListener('click', async () => {
 
 ## Current items
 
-| Element ID    | Visible when  | What it does                              |
-|---------------|---------------|-------------------------------------------|
-| `ctx-add-link`| folder        | Opens add-bookmark modal pre-set to folder |
-| `ctx-remove`  | bookmark      | Removes the bookmark from config          |
+| Element ID           | Visible when         | What it does                                     |
+|----------------------|----------------------|---------------------------------------------------|
+| `ctx-add-link`       | folder                | Opens add-bookmark modal pre-set to folder        |
+| `ctx-edit`           | folder, todo          | Opens the edit modal (name/width/height/icon)     |
+| `ctx-shrink-to-fit`  | folder, todo          | Resizes the card to fit its content               |
+| `ctx-move-page`      | folder, todo          | Opens the "move to page" submenu                  |
+| `ctx-refresh-screenshot` | bookmark          | Re-captures the bookmark's screenshot             |
+| `ctx-remove`         | bookmark              | Removes the bookmark from config                  |
+| `ctx-remove-item`    | todo-item              | Removes a single todo item                        |
+| `ctx-delete-list`    | todo                   | Deletes the whole todo list (with confirm)        |

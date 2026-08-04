@@ -5,6 +5,7 @@ A Firefox extension that replaces your new tab page with a customizable homescre
 ## Features
 
 - **Custom New Tab Page**: Beautiful, modern homescreen with organized bookmark folders
+- **Todo Lists**: Add todo-list cards (double-click an item to mark it complete) alongside your bookmark folders (see [docs/todo-widget.md](docs/todo-widget.md))
 - **GitHub Sync**: Store your bookmark configuration in a GitHub repository
 - **Cross-Device Sync**: Share your homescreen across multiple machines
 - **Offline Support**: Cached bookmarks work even when offline
