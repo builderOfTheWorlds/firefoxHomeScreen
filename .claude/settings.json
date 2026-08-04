@@ -54,7 +54,15 @@
       "Read(//tmp/**)",
       "Bash(rm -rf \"/c/Users/matt/AppData/Local/Temp/claude/c--Users-matt-PycharmProjects-firefoxHomeScreen-extension/bf451ba8-2e11-4ce3-8acc-ecbd49445c05/scratchpad/edge-profile6\")",
       "Bash(\"/c/Program Files \\(x86\\)/Microsoft/Edge/Application/msedge.exe\" --headless=new --disable-gpu --remote-debugging-port=9333 --user-data-dir=\"/c/Users/matt/AppData/Local/Temp/claude/c--Users-matt-PycharmProjects-firefoxHomeScreen-extension/bf451ba8-2e11-4ce3-8acc-ecbd49445c05/scratchpad/edge-profile6\" --window-size=1650,1000 about:blank)",
-      "Bash(where web-ext *)"
+      "Bash(where web-ext *)",
+      "PowerShell(Test-NetConnection -ComputerName 192.168.1.120 -Port 3000 -InformationLevel Quiet -WarningAction SilentlyContinue)",
+      "PowerShell(Test-NetConnection -ComputerName 192.168.1.120 -Port 22 -InformationLevel Quiet -WarningAction SilentlyContinue)",
+      "PowerShell(Test-NetConnection -ComputerName 192.168.1.120 -Port 2222 -InformationLevel Quiet -WarningAction SilentlyContinue)",
+      "Bash(git push *)",
+      "PowerShell(Test-NetConnection -ComputerName 192.168.1.120 -Port 2222 -WarningAction SilentlyContinue)",
+      "Bash(timeout 5 bash -c \"cat < /dev/tcp/192.168.1.120/2222\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(timeout 15 ssh -vv -p 2222 -o BatchMode=yes -o ConnectTimeout=10 git@192.168.1.120)"
     ],
     "additionalDirectories": [
       "C:\\Users\\matt\\AppData\\Local\\Temp\\claude\\c--Users-matt-PycharmProjects-firefoxHomeScreen-extension\\2fd7b169-0202-459e-8b9f-96604b7e4312\\scratchpad"
