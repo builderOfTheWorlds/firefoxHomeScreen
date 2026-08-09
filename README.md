@@ -211,6 +211,16 @@ MIT License - feel free to use and modify as you wish.
 4. Check the browser console for error messages
 5. Try clicking the sync button to force a refresh
 
+### After updating the extension, bookmarks don't show
+
+If you updated to a new version (especially after pulling changes), the cached state from the old version can cause bookmarks to not load. **Remove and reload the extension:**
+
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click **Remove** next to the extension
+3. Click **Load Temporary Add-on** and select `manifest.json` again
+
+This clears any stale cached data and ensures the new version starts fresh.
+
 ### "Configuration file not found" error
 
 Make sure you have a `bookmarks.json` file in the root of your repository (or update the configuration path in settings if it's in a different location).

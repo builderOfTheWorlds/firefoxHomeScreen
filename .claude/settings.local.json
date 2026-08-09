@@ -23,7 +23,11 @@
       "Bash(mv /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/extension-amo-*.zip /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/dist/)",
       "Bash(mv /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/web-ext-artifacts/*.xpi /c/Users/matt/PycharmProjects/firefoxHomeScreen-extension/dist/)",
       "WebSearch",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\frogg\\\\OneDrive\\\\Documents\\\\codeProjects\\\\firefoxHomeScreen\\\\firefoxHomeScreen\" -Recurse)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Format-Table -AutoSize)"
     ],
     "deny": [],
     "ask": []
