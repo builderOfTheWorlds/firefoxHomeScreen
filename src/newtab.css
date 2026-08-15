@@ -789,3 +789,48 @@ header {
   background: rgba(255, 255, 255, 0.25);
   color: white;
 }
+
+/* ==========================================================================
+   Mobile / narrow viewport (e.g. Firefox for Android)
+
+   Folders are normally positioned with an absolute px x/y saved from
+   desktop drag placement (see .folder + newtab.js renderBookmarks), which
+   would push most folders off-screen on a phone-width viewport. Below that
+   width we drop the freeform canvas and stack folders in a single flowing
+   column instead. This is view/launch-only: drag-to-move, drag-to-resize
+   and the folder-resize handle rely on mouse events and stay inert here —
+   editing (rename/delete/reorder) remains a desktop task. `!important` is
+   required to win over the inline left/top/width styles newtab.js sets.
+   ========================================================================== */
+@media (max-width: 700px) {
+  header {
+    flex-wrap: wrap;
+    padding: 0.6rem 1rem;
+  }
+
+  .container {
+    padding: 0 1rem;
+  }
+
+  .bookmarks-container {
+    min-height: 0;
+  }
+
+  .folder {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    margin-bottom: 1rem;
+  }
+
+  .folder.has-explicit-size .folder-body,
+  .folder.has-explicit-size .bookmarks-list {
+    overflow: visible !important;
+  }
+
+  .folder-resize-handle {
+    display: none;
+  }
+}

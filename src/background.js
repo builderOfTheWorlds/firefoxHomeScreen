@@ -1,5 +1,14 @@
 // Background Script
 // Handles background tasks and extension lifecycle
+//
+// Runs as a non-persistent event page (see manifest.json "persistent": false).
+// This is required on Firefox for Android, which aggressively kills persistent
+// background pages. Listeners below are registered synchronously at top-level
+// so Firefox can reload this script and redeliver queued events after a
+// suspend. One consequence on Android: if the event page is killed mid-flight
+// during the setTimeout delay in the screenshot capture below, that capture
+// is silently dropped — already handled as best-effort via the existing
+// try/catch, so no functional change needed there.
 
 browser.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {

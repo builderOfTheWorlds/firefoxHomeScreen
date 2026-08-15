@@ -12,6 +12,7 @@ const statusEl = document.getElementById('status');
 const formArea = document.getElementById('form-area');
 const noConfig = document.getElementById('no-config');
 const settingsLink = document.getElementById('settings-link');
+const openHomescreenBtn = document.getElementById('open-homescreen-btn');
 
 let loadedConfig = null;
 let capturedScreenshot = null; // dataUrl captured from the active tab on open
@@ -19,6 +20,24 @@ let capturedScreenshot = null; // dataUrl captured from the active tab on open
 settingsLink.addEventListener('click', (e) => {
   e.preventDefault();
   browser.runtime.openOptionsPage();
+  window.close();
+});
+
+// Firefox for Android doesn't support chrome_url_overrides, so newtab.html
+// never appears automatically there. Surface a manual way in from the
+// toolbar popup instead, Android-only (desktop already gets it on every
+// new tab, so the button would just be redundant clutter there).
+(async () => {
+  try {
+    const { os } = await browser.runtime.getPlatformInfo();
+    if (os === 'android') openHomescreenBtn.classList.remove('hidden');
+  } catch (e) {
+    // getPlatformInfo unavailable; leave the button hidden
+  }
+})();
+
+openHomescreenBtn.addEventListener('click', () => {
+  browser.tabs.create({ url: browser.runtime.getURL('newtab.html') });
   window.close();
 });
 

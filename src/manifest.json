@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "GitTabSync",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "A customizable homescreen with bookmarks organized by folders, synced via GitHub",
   "browser_specific_settings": {
     "gecko": {
@@ -12,7 +12,8 @@
         ],
         "optional": []
       }
-    }
+    },
+    "gecko_android": {}
   },
   "permissions": [
     "storage",
@@ -43,6 +44,7 @@
     "scripts": [
       "screenshot-db.js",
       "background.js"
-    ]
+    ],
+    "persistent": false
   }
 }

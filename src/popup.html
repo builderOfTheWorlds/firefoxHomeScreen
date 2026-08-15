@@ -105,9 +105,25 @@
       color: white;
       font-weight: 600;
     }
+
+    #open-homescreen-btn {
+      width: 100%;
+      margin-bottom: 0.75rem;
+      background: rgba(255,255,255,0.95);
+      color: #667eea;
+    }
+
+    #open-homescreen-btn.hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
+  <!-- Firefox for Android can't auto-show newtab.html as the new-tab page
+       (chrome_url_overrides is unsupported there), so this button is the
+       way in on mobile. Shown only when running on Android — see popup.js. -->
+  <button id="open-homescreen-btn" class="hidden">Open Homescreen ↗</button>
+
   <h2>Add Current Page</h2>
 
   <div id="no-config" class="hidden">

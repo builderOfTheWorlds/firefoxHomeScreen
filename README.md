@@ -40,6 +40,23 @@ Firefox doesn't have a single "developer mode" toggle like Chrome — instead, y
 
 *Will be available on Firefox Add-ons store once published*
 
+### Firefox for Android
+
+Supported, with a caveat: Firefox for Android doesn't allow extensions to override
+the new-tab page, so the homescreen can't appear automatically like it does on
+desktop. Instead:
+
+1. Install the extension (once published on AMO, or side-load a signed `.xpi`).
+2. Tap the extension's toolbar button (in the Android "Add-ons" menu) → **"Open
+   Homescreen ↗"**. This opens the homescreen as a regular tab.
+3. Use Firefox's menu → **Add to Home screen** on that tab to pin it as an icon on
+   your phone's home screen, so it behaves like a launcher afterward.
+
+Viewing and launching bookmarks, and adding new ones from the popup, work the same
+as desktop. Renaming, deleting, reordering, and resizing folders/bookmarks are
+desktop-only for now (that UI is drag-and-drop / right-click based). See
+[docs/mobile-support.md](docs/mobile-support.md) for the technical details.
+
 ## Setup Instructions
 
 ### 1. Create a GitHub Repository
